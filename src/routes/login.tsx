@@ -7,12 +7,6 @@ import { Button } from "@/components/ui/button";
 import logo from "@/assets/logo.png";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  ensureOwnerAccountFn,
-  getCurrentAuthUserFn,
-  getLoginBootstrapInfoFn,
-  loginWithPasswordFn,
-} from "@/lib/coolify-auth";
 import { setSessionToken, sessionHeaders } from "@/lib/client-session";
 
 export const Route = createFileRoute("/login")({
@@ -25,21 +19,34 @@ function LoginPage() {
   const [seeding, setSeeding] = useState(false);
   /** `null` = جارٍ التحقق من الخادم — لا نعرض زر التهيئة حتى نعرف */
   const [allowSeedOwner, setAllowSeedOwner] = useState<boolean | null>(null);
+  const [requiresSetupKey, setRequiresSetupKey] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [setupKey, setSetupKey] = useState("");
 
   useEffect(() => {
-    const check = async () => {
-      const res = await getCurrentAuthUserFn({ headers: sessionHeaders() });
-      if (res.user) navigate({ to: "/dashboard", replace: true });
-    };
-    void check();
+    (async () => {
+      try {
+        const { getCurrentAuthUserFn } = await import("@/lib/coolify-auth");
+        const res = await getCurrentAuthUserFn({ headers: sessionHeaders() });
+        if (res.user) navigate({ to: "/dashboard", replace: true });
+      } catch {
+        /* تجاهل: يبقى المستخدم على /login (مثلاً إن فشل الاتصال بقاعدة البيانات) */
+      }
+    })();
   }, [navigate]);
 
   useEffect(() => {
-    getLoginBootstrapInfoFn()
-      .then((b) => setAllowSeedOwner(!b.hasOwner))
-      .catch(() => setAllowSeedOwner(false));
+    import("@/lib/coolify-auth")
+      .then(({ getLoginBootstrapInfoFn }) => getLoginBootstrapInfoFn())
+      .then((b) => {
+        setAllowSeedOwner(!b.hasOwner);
+        setRequiresSetupKey(Boolean(b.requiresSetupKey));
+      })
+      .catch(() => {
+        setAllowSeedOwner(false);
+        setRequiresSetupKey(false);
+      });
   }, []);
 
   async function handleLogin(e: React.FormEvent<HTMLFormElement>) {
@@ -47,6 +54,7 @@ function LoginPage() {
     setLoading(true);
 
     try {
+      const { loginWithPasswordFn } = await import("@/lib/coolify-auth");
       const res = await loginWithPasswordFn({
         data: { email, password },
       });
@@ -68,11 +76,13 @@ function LoginPage() {
     }
     setSeeding(true);
     try {
+      const { ensureOwnerAccountFn, getLoginBootstrapInfoFn } = await import("@/lib/coolify-auth");
       const res = await ensureOwnerAccountFn({
         data: {
           email,
           password,
           fullName: "مدير النظام",
+          setupKey: setupKey.trim() || undefined,
         },
       });
       if (res.created) {
@@ -135,12 +145,25 @@ function LoginPage() {
             {loading && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
             دخول
           </Button>
+          {allowSeedOwner === true && requiresSetupKey && (
+            <div className="space-y-2">
+              <Label htmlFor="setupKey">رمز التهيئة</Label>
+              <Input
+                id="setupKey"
+                type="password"
+                value={setupKey}
+                onChange={(e) => setSetupKey(e.target.value)}
+                placeholder="أدخل OWNER_SETUP_KEY"
+                dir="ltr"
+              />
+            </div>
+          )}
           {allowSeedOwner === true && (
             <Button
               type="button"
               variant="outline"
               className="w-full"
-              disabled={seeding}
+              disabled={seeding || (requiresSetupKey && !setupKey.trim())}
               onClick={() => void handleSeedOwner()}
             >
               {seeding && <Loader2 className="w-4 h-4 animate-spin ml-2" />}

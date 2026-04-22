@@ -24,9 +24,10 @@ function getSessionTokenFromRequest(): string | null {
 }
 
 export async function resolveUserFromSession(): Promise<CoolifyAuthUser | null> {
-  await initializeDatabase();
   const token = getSessionTokenFromRequest();
   if (!token) return null;
+
+  await initializeDatabase();
 
   const result = await db.query(
     `
@@ -72,7 +73,10 @@ export async function getLoginBootstrapInfo() {
       SELECT 1 FROM app_users WHERE role = 'owner' AND is_active = TRUE
     ) AS has_owner`,
   );
-  return { hasOwner: Boolean((r.rows[0] as { has_owner: boolean } | undefined)?.has_owner) };
+  return {
+    hasOwner: Boolean((r.rows[0] as { has_owner: boolean } | undefined)?.has_owner),
+    requiresSetupKey: Boolean(process.env.OWNER_SETUP_KEY?.trim()),
+  };
 }
 
 function mapBookingRow(row: Record<string, unknown>) {
@@ -105,9 +109,26 @@ export async function ensureOwnerAccount(input: {
   email: string;
   password: string;
   fullName?: string;
+  setupKey?: string;
 }) {
   await initializeDatabase();
+  const ownerRes = await db.query(
+    `SELECT id FROM app_users WHERE role = 'owner' AND is_active = TRUE LIMIT 1`,
+  );
+  if (ownerRes.rows[0]) {
+    throw new Error("تم تعطيل تهيئة المدير بعد إنشاء أول حساب");
+  }
+
   const email = input.email.trim().toLowerCase();
+  if (!email.includes("@")) throw new Error("البريد الإلكتروني غير صالح");
+  if (input.password.trim().length < 8) {
+    throw new Error("كلمة المرور يجب أن تكون 8 أحرف على الأقل");
+  }
+
+  const requiredSetupKey = process.env.OWNER_SETUP_KEY?.trim();
+  if (requiredSetupKey && input.setupKey?.trim() !== requiredSetupKey) {
+    throw new Error("رمز التهيئة غير صحيح");
+  }
 
   const existing = await db.query(`SELECT id, role FROM app_users WHERE email = $1 LIMIT 1`, [
     email,

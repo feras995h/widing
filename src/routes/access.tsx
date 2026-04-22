@@ -22,13 +22,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Search, ShieldCheck } from "lucide-react";
-import {
-  createUserByOwnerFn,
-  getCurrentAuthUserFn,
-  listUsersWithRolesFn,
-  type CoolifyRole,
-  updateUserRoleFn,
-} from "@/lib/coolify-auth";
+import type { CoolifyRole } from "@/lib/auth-types";
 import { sessionHeaders } from "@/lib/client-session";
 
 export const Route = createFileRoute("/access")({
@@ -67,6 +61,7 @@ function AccessManagementPage() {
 
   async function loadData() {
     setLoading(true);
+    const { getCurrentAuthUserFn, listUsersWithRolesFn } = await import("@/lib/coolify-auth");
     const me = await getCurrentAuthUserFn({ headers: sessionHeaders() });
     setCurrentUserId(me.user?.id ?? null);
     try {
@@ -119,6 +114,7 @@ function AccessManagementPage() {
     setSavingUserId(userId);
 
     try {
+      const { updateUserRoleFn } = await import("@/lib/coolify-auth");
       await updateUserRoleFn({
         data: { userId, role: nextRole },
         headers: sessionHeaders(),
@@ -143,6 +139,7 @@ function AccessManagementPage() {
     }
     setCreating(true);
     try {
+      const { createUserByOwnerFn } = await import("@/lib/coolify-auth");
       const res = await createUserByOwnerFn({
         headers: sessionHeaders(),
         data: {

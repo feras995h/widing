@@ -6,7 +6,7 @@ import logo from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { clearSessionToken, sessionHeaders } from "@/lib/client-session";
-import { getCurrentAuthUserFn, logoutFn, type CoolifyRole } from "@/lib/coolify-auth";
+import type { CoolifyRole } from "@/lib/auth-types";
 
 const navItems = [
   { to: "/dashboard", label: "الحجوزات", icon: Calendar },
@@ -31,10 +31,17 @@ export function AppLayout({
 
   useEffect(() => {
     const loadAuth = async () => {
-      const res = await getCurrentAuthUserFn({ headers: sessionHeaders() });
-      setIsAuthenticated(Boolean(res.user));
-      setRole(res.user?.role ?? null);
-      setLoading(false);
+      try {
+        const { getCurrentAuthUserFn } = await import("@/lib/coolify-auth");
+        const res = await getCurrentAuthUserFn({ headers: sessionHeaders() });
+        setIsAuthenticated(Boolean(res.user));
+        setRole(res.user?.role ?? null);
+      } catch {
+        setIsAuthenticated(false);
+        setRole(null);
+      } finally {
+        setLoading(false);
+      }
     };
 
     void loadAuth();
@@ -54,7 +61,12 @@ export function AppLayout({
   const roleLabel = role === "owner" ? "مدير النظام" : "موظف حجوزات";
 
   async function handleLogout() {
-    await logoutFn({ headers: sessionHeaders() });
+    try {
+      const { logoutFn } = await import("@/lib/coolify-auth");
+      await logoutFn({ headers: sessionHeaders() });
+    } catch {
+      /* تجاهل فشل الخادم — نمسح الجلسة محلياً */
+    }
     clearSessionToken();
     navigate({ to: "/login", replace: true });
   }

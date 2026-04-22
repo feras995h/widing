@@ -1,0 +1,40 @@
+# /etc/systemd/system/veloura-venue.service
+[Unit]
+Description=Veloura Venue App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=veloura
+Group=veloura
+WorkingDirectory=/opt/veloura-venue/current
+EnvironmentFile=/opt/veloura-venue/shared/.env.production
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/veloura-venue
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=veloura-venue
+
+[Install]
+WantedBy=multi-user.target

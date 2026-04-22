@@ -1,13 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { CoolifyRole } from "./auth-types";
 
-export type CoolifyRole = "owner" | "staff";
-
-export interface CoolifyAuthUser {
-  id: string;
-  email: string;
-  fullName: string | null;
-  role: CoolifyRole;
-}
+export type { CoolifyAuthUser, CoolifyRole } from "./auth-types";
 
 export const getLoginBootstrapInfoFn = createServerFn({ method: "GET" }).handler(async () => {
   const services = await import("@/server/coolify-services.server");
@@ -15,7 +9,11 @@ export const getLoginBootstrapInfoFn = createServerFn({ method: "GET" }).handler
 });
 
 export const ensureOwnerAccountFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { email: string; password: string; fullName?: string } }) => {
+  async ({
+    data,
+  }: {
+    data: { email: string; password: string; fullName?: string; setupKey?: string };
+  }) => {
     const services = await import("@/server/coolify-services.server");
     return services.ensureOwnerAccount(data);
   },

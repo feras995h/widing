@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
-import { getCurrentAuthUserFn } from "@/lib/coolify-auth";
 import { sessionHeaders } from "@/lib/client-session";
 
 export const Route = createFileRoute("/")({
@@ -13,11 +12,23 @@ function Index() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const routeBySession = async () => {
-      const res = await getCurrentAuthUserFn({ headers: sessionHeaders() });
-      navigate({ to: res.user ? "/dashboard" : "/login", replace: true });
+    let cancelled = false;
+    (async () => {
+      try {
+        const { getCurrentAuthUserFn } = await import("@/lib/coolify-auth");
+        const res = await getCurrentAuthUserFn({ headers: sessionHeaders() });
+        if (!cancelled) {
+          navigate({ to: res.user ? "/dashboard" : "/login", replace: true });
+        }
+      } catch {
+        if (!cancelled) {
+          navigate({ to: "/login", replace: true });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-    void routeBySession();
   }, [navigate]);
 
   return (

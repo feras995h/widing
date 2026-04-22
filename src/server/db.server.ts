@@ -1,9 +1,20 @@
 import { Pool } from "pg";
 
 const connectionString = process.env.COOLIFY_DATABASE_URL || process.env.DATABASE_URL;
+const forceSsl = (process.env.DB_SSL || "").toLowerCase();
+const shouldUseSsl =
+  forceSsl === "1" ||
+  forceSsl === "true" ||
+  forceSsl === "require" ||
+  (forceSsl !== "false" && process.env.NODE_ENV === "production");
+const rejectUnauthorized = (process.env.DB_SSL_REJECT_UNAUTHORIZED || "true").toLowerCase() !== "false";
 
 if (!connectionString) {
-  throw new Error("Missing COOLIFY_DATABASE_URL/DATABASE_URL in environment variables.");
+  throw new Error(
+    "Missing COOLIFY_DATABASE_URL or DATABASE_URL. Add one to a .env file in the project root " +
+      "(see .env.example), or set it in your host environment (e.g. Coolify / Cloudflare). " +
+      "Restart the dev server after changing .env.",
+  );
 }
 
 const globalForDb = globalThis as unknown as {
@@ -15,7 +26,7 @@ export const db =
   globalForDb.__velouraPool ||
   new Pool({
     connectionString,
-    ssl: false,
+    ssl: shouldUseSsl ? { rejectUnauthorized } : undefined,
   });
 
 if (!globalForDb.__velouraPool) {

@@ -6,9 +6,13 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
+    "build:release": "vite build && node -e \"try{require('node:fs').rmSync('dist/server/.dev.vars',{force:true})}catch{}\"",
     "build:dev": "vite build --mode development",
+    "start": "vite preview --host 0.0.0.0 --port 8081",
     "preview": "vite preview",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run lint && npm run typecheck && npm run build",
     "format": "prettier --write ."
   },
   "dependencies": {
