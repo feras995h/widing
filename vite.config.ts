@@ -32,5 +32,8 @@ export default defineConfig(async (env) => {
 
   return {
     plugins: [tanstackStart(), tsconfigPaths(), react(), tailwindcss()],
+    preview: {
+      allowedHosts: [".sslip.io", "localhost", "127.0.0.1"],
+    },
   };
 });
