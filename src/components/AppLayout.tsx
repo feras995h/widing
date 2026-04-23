@@ -102,7 +102,7 @@ export function AppLayout({
       <div className="min-h-screen flex flex-col bg-background">
         <header className="bg-card border-b border-border shadow-elegant sticky top-0 z-40">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-            <div className="w-[180px] h-[64px] sm:w-[240px] sm:h-[86px] overflow-hidden rounded-xl border border-gold/40 shadow-gold">
+            <div className="w-[140px] h-[52px] sm:w-[180px] sm:h-[64px] md:w-[240px] md:h-[86px] overflow-hidden rounded-xl border border-gold/40 shadow-gold">
               <img
                 src={logo}
                 alt="VELOURA VENUE"
@@ -130,7 +130,7 @@ export function AppLayout({
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-20 sm:h-24">
             <div className="flex items-center gap-3">
-              <div className="w-[180px] h-[64px] sm:w-[240px] sm:h-[86px] overflow-hidden rounded-xl border border-gold/40 shadow-gold">
+              <div className="w-[140px] h-[52px] sm:w-[180px] sm:h-[64px] md:w-[240px] md:h-[86px] overflow-hidden rounded-xl border border-gold/40 shadow-gold">
                 <img
                   src={logo}
                   alt="VELOURA VENUE"

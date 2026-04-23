@@ -127,7 +127,7 @@ function CustomerDetailPage() {
             )}
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:gap-3 mt-6 pt-6 border-t">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mt-6 pt-6 border-t">
           <div>
             <p className="text-xs text-muted-foreground">إجمالي الحجوزات</p>
             <p className="font-bold text-primary text-sm sm:text-base">

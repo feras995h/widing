@@ -261,7 +261,7 @@ function ReportsPage() {
           value={String(month)}
           onValueChange={(v) => setMonth(v === "all" ? "all" : parseInt(v))}
         >
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-full sm:w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -274,7 +274,7 @@ function ReportsPage() {
           </SelectContent>
         </Select>
         <Select value={String(year)} onValueChange={(v) => setYear(parseInt(v))}>
-          <SelectTrigger className="w-28">
+          <SelectTrigger className="w-full sm:w-28">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -288,7 +288,7 @@ function ReportsPage() {
       </Card>
 
       {/* Financial summary */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <SummaryCard
           icon={TrendingUp}
           label="الإيرادات"

@@ -193,7 +193,7 @@ function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           icon={CalendarDays}
           label="حجوزات الشهر"
@@ -223,7 +223,7 @@ function DashboardPage() {
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
-            <h2 className="text-xl sm:text-2xl font-bold min-w-[180px] text-center">
+            <h2 className="text-lg sm:text-2xl font-bold text-center">
               {ARABIC_MONTHS[currentMonth.getMonth()]}{" "}
               <LatinDigits className="font-bold">{currentMonth.getFullYear()}</LatinDigits>
             </h2>

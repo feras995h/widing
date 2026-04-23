@@ -249,68 +249,70 @@ function AccessManagementPage() {
         ) : filtered.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">لا يوجد مستخدمون مطابقون.</div>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-right">الاسم</TableHead>
-                <TableHead className="text-right">البريد الإلكتروني</TableHead>
-                <TableHead className="text-right">الدور الحالي</TableHead>
-                <TableHead className="text-right">الدور الجديد</TableHead>
-                <TableHead className="text-right">إجراء</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((u) => {
-                const selectedRole = draftRoles[u.id] ?? "staff";
-                return (
-                  <TableRow key={u.id}>
-                    <TableCell className="font-medium text-right">{u.fullName}</TableCell>
-                    <TableCell className="text-right" dir="ltr">
-                      {u.email}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {u.role ? (
-                        <Badge variant={u.role === "owner" ? "default" : "secondary"}>
-                          {roleLabels[u.role]}
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline">غير محددة</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Select
-                        value={selectedRole}
-                        onValueChange={(v) =>
-                          setDraftRoles((prev) => ({ ...prev, [u.id]: v as CoolifyRole }))
-                        }
-                      >
-                        <SelectTrigger className="w-[190px]">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="staff">موظف حجوزات</SelectItem>
-                          <SelectItem value="owner">مدير النظام</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        onClick={() => void saveRole(u.id)}
-                        disabled={
-                          savingUserId === u.id ||
-                          u.role === selectedRole ||
-                          (currentUserId === u.id && selectedRole !== "owner")
-                        }
-                      >
-                        {savingUserId === u.id ? "جارٍ الحفظ..." : "حفظ"}
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-right">الاسم</TableHead>
+                  <TableHead className="text-right">البريد الإلكتروني</TableHead>
+                  <TableHead className="text-right">الدور الحالي</TableHead>
+                  <TableHead className="text-right">الدور الجديد</TableHead>
+                  <TableHead className="text-right">إجراء</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((u) => {
+                  const selectedRole = draftRoles[u.id] ?? "staff";
+                  return (
+                    <TableRow key={u.id}>
+                      <TableCell className="font-medium text-right">{u.fullName}</TableCell>
+                      <TableCell className="text-right" dir="ltr">
+                        {u.email}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {u.role ? (
+                          <Badge variant={u.role === "owner" ? "default" : "secondary"}>
+                            {roleLabels[u.role]}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline">غير محددة</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Select
+                          value={selectedRole}
+                          onValueChange={(v) =>
+                            setDraftRoles((prev) => ({ ...prev, [u.id]: v as CoolifyRole }))
+                          }
+                        >
+                          <SelectTrigger className="w-full min-w-[150px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="staff">موظف حجوزات</SelectItem>
+                            <SelectItem value="owner">مدير النظام</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          onClick={() => void saveRole(u.id)}
+                          disabled={
+                            savingUserId === u.id ||
+                            u.role === selectedRole ||
+                            (currentUserId === u.id && selectedRole !== "owner")
+                          }
+                        >
+                          {savingUserId === u.id ? "جارٍ الحفظ..." : "حفظ"}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </Card>
     </div>

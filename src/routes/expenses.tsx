@@ -192,7 +192,7 @@ function GeneralExpenses() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="amount">المبلغ (د.ل) *</Label>
                   <Input id="amount" name="amount" type="number" min={0.01} step="0.01" required />
@@ -379,7 +379,7 @@ function WorkersSection() {
                 <Label htmlFor="w_name">الاسم الكامل *</Label>
                 <Input id="w_name" name="full_name" required />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="w_job">الوظيفة *</Label>
                   <Input id="w_job" name="job_title" required placeholder="نادل، طباخ..." />
@@ -498,7 +498,7 @@ function WorkersSection() {
             <DialogTitle>دفع راتب — {selectedWorker?.full_name}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handlePay} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="p_amount">المبلغ (د.ل) *</Label>
                 <Input

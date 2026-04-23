@@ -66,7 +66,7 @@ function renderHtml(data: BookingReceiptData): string {
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
     <style>
-      @page { size: A4; margin: 8mm; }
+      @page { size: A4; margin: 6mm; }
       * { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; }
       body {
@@ -443,8 +443,38 @@ function renderHtml(data: BookingReceiptData): string {
         }
         .controls { display: none !important; }
         .paper { box-shadow: none; }
-        .paper-inner { margin: 0; border: 0; padding: 6mm; }
+        .paper-inner { margin: 0; border: 0; padding: 4.5mm; }
         .header-brand { -webkit-print-color-adjust: exact; }
+        .header-brand {
+          padding: 8px 10px 10px;
+          border-radius: 2px;
+        }
+        .logo-wrap {
+          min-height: 120px;
+          max-height: 170px;
+          padding: 2px 0 4px;
+        }
+        .logo {
+          max-height: 150px;
+        }
+        .doc-block { margin-top: 12px; }
+        .orn { margin-bottom: 4px; }
+        .receipt-title { font-size: 1.32rem; }
+        .subtitle { margin-top: 3px; font-size: 0.76rem; }
+        .tagline { margin-top: 2px; font-size: 0.64rem; }
+        .stamp-wrap { margin-top: 10px; }
+        .meta { margin-top: 12px; gap: 8px; }
+        .meta .badge { padding: 8px 10px; }
+        .section { margin-top: 10px; }
+        .section h3 { padding: 8px 12px; }
+        .item { padding: 8px 12px; }
+        .chips { padding: 8px 12px; gap: 6px; }
+        .totals { margin-top: 10px; }
+        .row { padding: 8px 12px; }
+        .notes { margin-top: 10px; padding: 9px 11px; }
+        .staff-signature { margin-top: 12px; padding: 9px 11px; }
+        .sig-preview { min-height: 52px; padding-top: 8px; }
+        .footer-note { margin-top: 12px; font-size: 0.64rem; }
       }
     </style>
   </head>
