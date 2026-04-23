@@ -224,7 +224,10 @@
 
 @layer utilities {
   .latin-digits {
+    /* Prefer cross-platform Latin UI fonts for stable 0-9 glyphs on mobile. */
+    font-family: "Roboto", "Noto Sans", "Helvetica Neue", Arial, sans-serif;
     font-variant-numeric: lining-nums tabular-nums;
     font-feature-settings: "locl" 0, "lnum" 1, "tnum" 1;
+    unicode-bidi: isolate;
   }
 }

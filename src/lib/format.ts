@@ -1,11 +1,16 @@
 /** Western (Latin) digits 0–9; use with ar-LY so month names stay Arabic. */
 const LATN = "latn" as const;
 
-function normalizeSeparators(value: string): string {
+function toLatinDigits(value: string): string {
   return value
-    .replaceAll("٬", ",")
-    .replaceAll("٫", ".")
-    .replaceAll("،", ",");
+    .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+    .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
+}
+
+function normalizeSeparators(value: string): string {
+  return toLatinDigits(
+    value.replaceAll("٬", ",").replaceAll("٫", ".").replaceAll("،", ","),
+  );
 }
 
 export function formatLYD(amount: number | string | null | undefined): string {
@@ -33,22 +38,24 @@ export function formatDecimal(
 
 export function formatDate(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("ar-LY", {
+  const formatted = new Intl.DateTimeFormat("ar-LY", {
     year: "numeric",
     month: "long",
     day: "numeric",
     numberingSystem: LATN,
   }).format(d);
+  return normalizeSeparators(formatted);
 }
 
 export function formatShortDate(date: string | Date): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return new Intl.DateTimeFormat("ar-LY", {
+  const formatted = new Intl.DateTimeFormat("ar-LY", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
     numberingSystem: LATN,
   }).format(d);
+  return normalizeSeparators(formatted);
 }
 
 /** YYYY-MM-DD in the browser's local calendar (unlike `Date#toISOString`, which is UTC). */

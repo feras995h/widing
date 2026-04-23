@@ -6,9 +6,16 @@ import { cn } from "@/lib/utils";
  * (بدون ١٢٣ حتى عند استخدام خط Cairo وغيره بميزات local digits).
  */
 export function LatinDigits({ children, className }: { children: ReactNode; className?: string }) {
+  const rendered =
+    typeof children === "string"
+      ? children
+          .replace(/[٠-٩]/g, (d) => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)))
+          .replace(/[۰-۹]/g, (d) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)))
+      : children;
+
   return (
     <span lang="en" dir="ltr" className={cn("latin-digits tabular-nums", className)} translate="no">
-      {children}
+      {rendered}
     </span>
   );
 }
