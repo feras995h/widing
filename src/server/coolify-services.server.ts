@@ -93,6 +93,10 @@ function mapBookingRow(row: Record<string, unknown>) {
     includes_decor: Boolean(row.includes_decor),
     includes_photography: Boolean(row.includes_photography),
     notes: (row.notes as string | null) ?? null,
+    customer_phone2: (row.customer_phone2 as string | null) ?? null,
+    customer_identity_number: (row.customer_identity_number as string | null) ?? null,
+    event_start_time: (row.event_start_time as string | null) ?? null,
+    event_end_time: (row.event_end_time as string | null) ?? null,
     customers: {
       full_name: (row.customer_name as string) || "—",
       phone: (row.customer_phone as string) || "—",
@@ -443,6 +447,10 @@ export async function getCustomerDetail(input: { customerId: string }) {
       includes_decor: Boolean(row.includes_decor),
       includes_photography: Boolean(row.includes_photography),
       notes: (row.notes as string | null) ?? null,
+      customer_phone2: (row.customer_phone2 as string | null) ?? null,
+      customer_identity_number: (row.customer_identity_number as string | null) ?? null,
+      event_start_time: (row.event_start_time as string | null) ?? null,
+      event_end_time: (row.event_end_time as string | null) ?? null,
       payments,
     };
   });
@@ -501,6 +509,10 @@ export async function createBooking(input: {
   guestsCount: number | null;
   totalPrice: number;
   paidAmount: number;
+  customerPhone2: string | null;
+  customerIdentityNumber: string | null;
+  eventStartTime: string | null;
+  eventEndTime: string | null;
   notes: string | null;
   services: {
     hall: boolean;
@@ -515,6 +527,44 @@ export async function createBooking(input: {
   const client = await db.connect();
   try {
     await client.query("BEGIN");
+
+    const cleanStart = input.eventStartTime?.trim() || null;
+    const cleanEnd = input.eventEndTime?.trim() || null;
+    if ((cleanStart && !cleanEnd) || (!cleanStart && cleanEnd)) {
+      throw new Error("يجب إدخال وقت البداية والنهاية معًا");
+    }
+    if (cleanStart && cleanEnd && cleanStart >= cleanEnd) {
+      throw new Error("وقت نهاية المناسبة يجب أن يكون بعد وقت البداية");
+    }
+
+    // Prevent concurrent conflicting bookings on the same event date.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [input.eventDate]);
+
+    const existingRes = await client.query(
+      `
+        SELECT event_start_time, event_end_time
+        FROM bookings
+        WHERE event_date = $1
+          AND COALESCE(status, 'confirmed') <> 'cancelled'
+      `,
+      [input.eventDate],
+    );
+
+    const hasConflict = existingRes.rows.some((row) => {
+      const existingStart = (row.event_start_time as string | null)?.trim() || null;
+      const existingEnd = (row.event_end_time as string | null)?.trim() || null;
+
+      // If one booking has no times, treat same-day booking as conflicting for safety.
+      if (!cleanStart || !cleanEnd || !existingStart || !existingEnd) {
+        return true;
+      }
+
+      return cleanStart < existingEnd && cleanEnd > existingStart;
+    });
+
+    if (hasConflict) {
+      throw new Error("يوجد حجز آخر في نفس التاريخ والوقت. الرجاء اختيار وقت مختلف.");
+    }
 
     let customerId = input.customerId ?? "";
     if (input.mode === "new") {
@@ -543,9 +593,13 @@ export async function createBooking(input: {
           includes_catering,
           includes_decor,
           includes_photography,
+          customer_phone2,
+          customer_identity_number,
+          event_start_time,
+          event_end_time,
           notes
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
         RETURNING id
       `,
       [
@@ -558,6 +612,10 @@ export async function createBooking(input: {
         input.services.catering,
         input.services.decor,
         input.services.photography,
+        input.customerPhone2,
+        input.customerIdentityNumber,
+        cleanStart,
+        cleanEnd,
         input.notes,
       ],
     );
@@ -600,6 +658,27 @@ export async function createPayment(input: {
     `,
     [input.bookingId, input.amount, input.paymentDate, input.method, input.notes],
   );
+  return { ok: true };
+}
+
+export async function cancelBooking(input: { bookingId: string }) {
+  await initializeDatabase();
+  await requireAuthUser();
+
+  const result = await db.query(
+    `
+      UPDATE bookings
+      SET status = 'cancelled'
+      WHERE id = $1
+      RETURNING id
+    `,
+    [input.bookingId],
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("الحجز غير موجود");
+  }
+
   return { ok: true };
 }
 

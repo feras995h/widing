@@ -23,7 +23,13 @@ import {
   FileDown,
   CalendarRange,
 } from "lucide-react";
-import { formatLYD, eventTypeLabels, expenseCategoryLabels } from "@/lib/format";
+import {
+  formatLYD,
+  eventTypeLabels,
+  expenseCategoryLabels,
+  statusLabels,
+  statusColors,
+} from "@/lib/format";
 import { exportMonthlyReportPdf } from "@/lib/pdf-report";
 import { toast } from "sonner";
 import { getReportsDataFn } from "@/lib/coolify-data";
@@ -70,18 +76,22 @@ function ReportsPage() {
 
   const filtered = useMemo(() => {
     const fb = bookings.filter((b) => inRange(b.event_date));
+    const fbActive = fb.filter((b: any) => b.status !== "cancelled");
+    const fbCancelled = fb.filter((b: any) => b.status === "cancelled");
+    const activeBookingIds = new Set(fbActive.map((b: any) => String(b.id)));
     const fp = payments.filter((p) => inRange(p.payment_date));
+    const fpActive = fp.filter((p: any) => activeBookingIds.has(String(p.booking_id)));
     const fe = expenses.filter((e) => inRange(e.expense_date));
     const fwp = workerPayments.filter((w) => inRange(w.payment_date));
 
-    const revenue = fp.reduce((s, p) => s + Number(p.amount), 0);
+    const revenue = fpActive.reduce((s, p) => s + Number(p.amount), 0);
     const totalExpenses = fe.reduce((s, e) => s + Number(e.amount), 0);
     const totalSalaries = fwp.reduce((s, w) => s + Number(w.amount), 0);
     const profit = revenue - totalExpenses - totalSalaries;
 
     let bookingContracted = 0;
     let bookingPaidOnBookings = 0;
-    for (const b of fb) {
+    for (const b of fbActive) {
       const total = Number(b.total_price);
       const paid = Array.isArray(b.payments)
         ? b.payments.reduce((s: number, p: { amount: number | string }) => s + Number(p.amount), 0)
@@ -93,7 +103,10 @@ function ReportsPage() {
 
     return {
       fb,
+      fbActive,
+      fbCancelled,
       fp,
+      fpActive,
       fe,
       fwp,
       revenue,
@@ -165,7 +178,7 @@ function ReportsPage() {
 
   async function handleExportPdf() {
     try {
-      await exportMonthlyReportPdf({
+      const result = await exportMonthlyReportPdf({
         year,
         monthlyBreakdown,
         yearTotals,
@@ -182,7 +195,17 @@ function ReportsPage() {
           amount: Number(w.amount),
         })),
       });
-      toast.success("تم تصدير التقرير");
+      if (result.fontSource === "none") {
+        toast.success("تم تصدير التقرير", {
+          description: "تم التصدير بخط احتياطي لأن الخط العربي لم يتم تحميله.",
+        });
+      } else if (result.fontSource === "cdn") {
+        toast.success("تم تصدير التقرير", {
+          description: "تم استخدام خط عربي احتياطي عبر الإنترنت.",
+        });
+      } else {
+        toast.success("تم تصدير التقرير");
+      }
     } catch (err: any) {
       toast.error("فشل التصدير", { description: err?.message });
     }
@@ -191,7 +214,7 @@ function ReportsPage() {
   // Customer report
   const customerStats = useMemo(() => {
     const map = new Map<string, { name: string; count: number; total: number; paid: number }>();
-    filtered.fb.forEach((b: any) => {
+    filtered.fbActive.forEach((b: any) => {
       const key = b.customer_id;
       const existing = map.get(key) ?? { name: b.customers.full_name, count: 0, total: 0, paid: 0 };
       existing.count += 1;
@@ -214,14 +237,16 @@ function ReportsPage() {
   // Bookings by event type
   const bookingsByType = useMemo(() => {
     const map = new Map<string, { count: number; total: number }>();
-    filtered.fb.forEach((b: any) => {
+    filtered.fbActive.forEach((b: any) => {
       const existing = map.get(b.event_type) ?? { count: 0, total: 0 };
       existing.count += 1;
       existing.total += Number(b.total_price);
       map.set(b.event_type, existing);
     });
     return Array.from(map.entries());
-  }, [filtered.fb]);
+  }, [filtered.fbActive]);
+
+  const cancelledBookings = useMemo(() => filtered.fbCancelled, [filtered.fbCancelled]);
 
   const years = Array.from({ length: 5 }, (_, i) => now.getFullYear() - 2 + i);
   const months = [
@@ -357,10 +382,14 @@ function ReportsPage() {
                 value={formatLYD(filtered.revenue)}
                 positive
               />
-              <Row label="عدد الحجوزات" value={<LatinDigits>{filtered.fb.length}</LatinDigits>} />
+              <Row label="عدد الحجوزات النشطة" value={<LatinDigits>{filtered.fbActive.length}</LatinDigits>} />
               <Row
-                label="عدد دفعات العملاء"
-                value={<LatinDigits>{filtered.fp.length}</LatinDigits>}
+                label="عدد الحجوزات الملغاة (مؤرشفة)"
+                value={<LatinDigits>{filtered.fbCancelled.length}</LatinDigits>}
+              />
+              <Row
+                label="عدد دفعات الحجوزات النشطة"
+                value={<LatinDigits>{filtered.fpActive.length}</LatinDigits>}
               />
               <hr />
               <Row label="مصروفات عامة" value={`- ${formatLYD(filtered.totalExpenses)}`} negative />
@@ -454,12 +483,43 @@ function ReportsPage() {
                     className="flex items-center justify-between p-3 bg-secondary/40 rounded-lg"
                   >
                     <div className="flex items-center gap-3">
-                      <Badge variant="secondary">{eventTypeLabels[type]}</Badge>
+                      <Badge variant="secondary">{eventTypeLabels[type] ?? type}</Badge>
                       <span className="text-sm text-muted-foreground">
                         <LatinDigits>{stats.count}</LatinDigits> حجز
                       </span>
                     </div>
                     <span className="font-bold text-primary">{formatLYD(stats.total)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+          <Card className="p-6">
+            <h3 className="font-bold mb-4">الحجوزات الملغاة (مؤرشفة)</h3>
+            {cancelledBookings.length === 0 ? (
+              <p className="text-muted-foreground text-center py-4">
+                لا توجد حجوزات ملغاة في هذه الفترة
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {cancelledBookings.map((b: any) => (
+                  <div
+                    key={b.id}
+                    className="flex items-center justify-between p-3 bg-secondary/40 rounded-lg"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{b.customers?.full_name ?? "—"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(b.event_date).toLocaleDateString("ar-LY", { numberingSystem: "latn" })}{" "}
+                        • {eventTypeLabels[b.event_type] ?? b.event_type}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge className={`border ${statusColors.cancelled}`}>
+                        {statusLabels.cancelled}
+                      </Badge>
+                      <span className="font-bold text-primary">{formatLYD(Number(b.total_price))}</span>
+                    </div>
                   </div>
                 ))}
               </div>

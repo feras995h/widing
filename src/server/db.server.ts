@@ -82,10 +82,19 @@ export async function initializeDatabase(): Promise<void> {
       includes_catering BOOLEAN NOT NULL DEFAULT FALSE,
       includes_decor BOOLEAN NOT NULL DEFAULT FALSE,
       includes_photography BOOLEAN NOT NULL DEFAULT FALSE,
+      customer_phone2 TEXT,
+      customer_identity_number TEXT,
+      event_start_time TEXT,
+      event_end_time TEXT,
       notes TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+
+  await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_phone2 TEXT;`);
+  await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS customer_identity_number TEXT;`);
+  await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS event_start_time TEXT;`);
+  await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS event_end_time TEXT;`);
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS payments (

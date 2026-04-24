@@ -34,7 +34,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { openBookingPrintWindow, printBookingReceipt } from "@/lib/print-booking-receipt";
 import logo from "@/assets/logo.png";
-import { getDashboardBookingsFn } from "@/lib/coolify-data";
+import { cancelBookingFn, getDashboardBookingsFn } from "@/lib/coolify-data";
 import { sessionHeaders } from "@/lib/client-session";
 
 export const Route = createFileRoute("/dashboard")({
@@ -57,6 +57,10 @@ interface Booking {
   includes_catering: boolean;
   includes_decor: boolean;
   includes_photography: boolean;
+  customer_phone2: string | null;
+  customer_identity_number: string | null;
+  event_start_time: string | null;
+  event_end_time: string | null;
   notes: string | null;
   customers: { full_name: string; phone: string };
   payments: { amount: number }[];
@@ -122,13 +126,18 @@ function DashboardPage() {
     return days;
   }, [currentMonth]);
 
+  const activeBookings = useMemo(
+    () => bookings.filter((b) => b.status !== "cancelled"),
+    [bookings],
+  );
+
   function bookingsOnDay(date: Date | null) {
     if (!date) return [];
     const key = localDateKey(date);
-    return bookings.filter((b) => eventDateYmd(b.event_date) === key);
+    return activeBookings.filter((b) => eventDateYmd(b.event_date) === key);
   }
 
-  const monthBookings = bookings.filter((b) => {
+  const monthBookings = activeBookings.filter((b) => {
     const p = partsFromYmd(b.event_date);
     if (!p) return false;
     return p.m0 === currentMonth.getMonth() && p.y === currentMonth.getFullYear();
@@ -181,12 +190,32 @@ function DashboardPage() {
           paymentStatus: remaining <= 0 ? "full" : "partial",
           services,
           notes: booking.notes,
+          customerPhone2: booking.customer_phone2,
+          customerIdentityNumber: booking.customer_identity_number,
+          eventStartTime: booking.event_start_time,
+          eventEndTime: booking.event_end_time,
         },
         preparedPrintWindow,
       );
     } catch (err) {
       const description = err instanceof Error ? err.message : "تعذر فتح نافذة الطباعة";
       toast.error("فشل إعادة طباعة الوصل", { description });
+    }
+  }
+
+  async function handleCancelBooking(booking: Booking) {
+    const ok = window.confirm(
+      `هل تريد إلغاء حجز ${booking.customers.full_name}؟\nسيبقى الحجز محفوظًا في السجل كـ (ملغى).`,
+    );
+    if (!ok) return;
+    try {
+      await cancelBookingFn({ headers: sessionHeaders(), data: { bookingId: booking.id } });
+      toast.success("تم إلغاء الحجز وأرشفته");
+      setSelectedBooking(null);
+      await loadBookings();
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "تعذر إلغاء الحجز";
+      toast.error("فشل إلغاء الحجز", { description });
     }
   }
 
@@ -529,6 +558,15 @@ function DashboardPage() {
                         className="w-full bg-gradient-gold text-gold-foreground"
                       >
                         <Plus className="w-4 h-4 ml-1" /> تسجيل دفعة
+                      </Button>
+                    )}
+                    {selectedBooking.status !== "cancelled" && (
+                      <Button
+                        variant="destructive"
+                        onClick={() => handleCancelBooking(selectedBooking)}
+                        className="w-full"
+                      >
+                        إلغاء الحجز (أرشفة)
                       </Button>
                     )}
                     <Button

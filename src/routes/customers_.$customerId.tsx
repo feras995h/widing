@@ -6,7 +6,14 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Phone, User, Calendar, ChevronLeft } from "lucide-react";
-import { formatLYD, formatShortDate, eventTypeLabels, paymentMethodLabels } from "@/lib/format";
+import {
+  formatLYD,
+  formatShortDate,
+  eventTypeLabels,
+  paymentMethodLabels,
+  statusLabels,
+  statusColors,
+} from "@/lib/format";
 import { getCustomerDetailFn } from "@/lib/coolify-data";
 import { sessionHeaders } from "@/lib/client-session";
 import { toast } from "sonner";
@@ -175,7 +182,12 @@ function CustomerDetailPage() {
                         )}
                       </p>
                     </div>
-                    <div className="text-left sm:text-right">
+                    <div className="text-left sm:text-right space-y-1">
+                      <div className="flex justify-end">
+                        <Badge className={`border ${statusColors[b.status] ?? statusColors.confirmed}`}>
+                          {statusLabels[b.status] ?? b.status}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-muted-foreground">قيمة الحجز</p>
                       <p className="font-bold text-primary">{formatLYD(b.total_price)}</p>
                     </div>

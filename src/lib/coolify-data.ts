@@ -43,6 +43,10 @@ export const createBookingFn = createServerFn({ method: "POST" }).handler(
       guestsCount: number | null;
       totalPrice: number;
       paidAmount: number;
+      customerPhone2: string | null;
+      customerIdentityNumber: string | null;
+      eventStartTime: string | null;
+      eventEndTime: string | null;
       notes: string | null;
       services: {
         hall: boolean;
@@ -71,6 +75,13 @@ export const createPaymentFn = createServerFn({ method: "POST" }).handler(
   }) => {
     const services = await import("@/server/coolify-services.server");
     return services.createPayment(data);
+  },
+);
+
+export const cancelBookingFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { bookingId: string } }) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.cancelBooking(data);
   },
 );
 

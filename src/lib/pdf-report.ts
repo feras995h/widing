@@ -18,17 +18,22 @@ interface ExportArgs {
   workerPaymentsDetail: { date: string; worker: string; period: string; amount: number }[];
 }
 
-let cachedFont: string | null = null;
+interface FontLoadResult {
+  base64: string | null;
+  source: "local" | "cdn" | "none";
+}
 
-async function loadArabicFont(): Promise<string> {
-  if (cachedFont) return cachedFont;
-  // Amiri Regular — open-source Arabic font with broad Unicode coverage
-  const url =
-    "https://cdn.jsdelivr.net/gh/aliftype/amiri@1.000/fonts/ttf/Amiri-Regular.ttf";
+interface ExportResult {
+  usedArabicFont: boolean;
+  fontSource: "local" | "cdn" | "none";
+}
+
+let cachedFont: FontLoadResult | null = null;
+
+async function fontToBase64(url: string): Promise<string | null> {
   const res = await fetch(url);
-  if (!res.ok) throw new Error("تعذر تحميل خط التقرير");
+  if (!res.ok) return null;
   const buf = await res.arrayBuffer();
-  // ArrayBuffer -> base64
   let binary = "";
   const bytes = new Uint8Array(buf);
   const chunk = 0x8000;
@@ -38,7 +43,27 @@ async function loadArabicFont(): Promise<string> {
       Array.from(bytes.subarray(i, i + chunk)),
     );
   }
-  cachedFont = btoa(binary);
+  return btoa(binary);
+}
+
+async function loadArabicFont(): Promise<FontLoadResult> {
+  if (cachedFont) return cachedFont;
+
+  const localBase64 = await fontToBase64("/fonts/Amiri-Regular.ttf").catch(() => null);
+  if (localBase64) {
+    cachedFont = { base64: localBase64, source: "local" };
+    return cachedFont;
+  }
+
+  const cdnBase64 = await fontToBase64(
+    "https://github.com/google/fonts/raw/main/ofl/amiri/Amiri-Regular.ttf",
+  ).catch(() => null);
+  if (cdnBase64) {
+    cachedFont = { base64: cdnBase64, source: "cdn" };
+    return cachedFont;
+  }
+
+  cachedFont = { base64: null, source: "none" };
   return cachedFont;
 }
 
@@ -51,26 +76,32 @@ function fmtDate(s: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export async function exportMonthlyReportPdf(args: ExportArgs): Promise<void> {
-  const fontB64 = await loadArabicFont();
+export async function exportMonthlyReportPdf(args: ExportArgs): Promise<ExportResult> {
+  const rtl = (value: string) => `\u202B${value}\u202C`;
+  const font = await loadArabicFont();
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
 
-  doc.addFileToVFS("Amiri-Regular.ttf", fontB64);
-  doc.addFont("Amiri-Regular.ttf", "Amiri", "normal");
-  doc.setFont("Amiri", "normal");
+  if (font.base64) {
+    doc.addFileToVFS("Amiri-Regular.ttf", font.base64);
+    doc.addFont("Amiri-Regular.ttf", "Amiri", "normal");
+    doc.setFont("Amiri", "normal");
+  } else {
+    doc.setFont("helvetica", "normal");
+  }
+  (doc as { setR2L?: (value: boolean) => void }).setR2L?.(true);
 
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header
   doc.setFontSize(18);
-  doc.text("تقرير المصروفات السنوي - Veloura Venue", pageWidth / 2, 50, {
+  doc.text(rtl("تقرير المصروفات السنوي - Veloura Venue"), pageWidth / 2, 50, {
     align: "center",
   });
   doc.setFontSize(12);
-  doc.text(`السنة: ${args.year}`, pageWidth / 2, 72, { align: "center" });
+  doc.text(rtl(`السنة: ${args.year}`), pageWidth / 2, 72, { align: "center" });
   doc.setFontSize(9);
   doc.text(
-    `تاريخ التصدير: ${new Date().toLocaleDateString("ar-LY", { numberingSystem: "latn" })}`,
+    rtl(`تاريخ التصدير: ${new Date().toLocaleDateString("ar-LY", { numberingSystem: "latn" })}`),
     pageWidth / 2,
     88,
     { align: "center" },
@@ -78,20 +109,20 @@ export async function exportMonthlyReportPdf(args: ExportArgs): Promise<void> {
 
   // Section 1: Monthly summary
   doc.setFontSize(13);
-  doc.text("الملخص الشهري", pageWidth - 40, 120, { align: "right" });
+  doc.text(rtl("الملخص الشهري"), pageWidth - 40, 120, { align: "right" });
 
   autoTable(doc, {
     startY: 130,
-    head: [["الشهر", "مصروفات عامة", "رواتب العمال", "الإجمالي"]],
+    head: [[rtl("الشهر"), rtl("مصروفات عامة"), rtl("رواتب العمال"), rtl("الإجمالي")]],
     body: args.monthlyBreakdown.map((m) => [
-      m.monthLabel,
+      rtl(m.monthLabel),
       m.generalExpenses ? fmt(m.generalExpenses) : "-",
       m.workerPayments ? fmt(m.workerPayments) : "-",
       m.total ? fmt(m.total) : "-",
     ]),
     foot: [
       [
-        "إجمالي السنة",
+        rtl("إجمالي السنة"),
         fmt(args.yearTotals.generalExpenses),
         fmt(args.yearTotals.workerPayments),
         fmt(args.yearTotals.total),
@@ -126,29 +157,29 @@ export async function exportMonthlyReportPdf(args: ExportArgs): Promise<void> {
     nextY = 60;
   }
   doc.setFontSize(13);
-  doc.text("تفاصيل المصروفات العامة", pageWidth - 40, nextY, {
+  doc.text(rtl("تفاصيل المصروفات العامة"), pageWidth - 40, nextY, {
     align: "right",
   });
 
   autoTable(doc, {
     startY: nextY + 10,
-    head: [["التاريخ", "الفئة", "الوصف", "المبلغ"]],
+    head: [[rtl("التاريخ"), rtl("الفئة"), rtl("الوصف"), rtl("المبلغ")]],
     body:
       args.expensesDetail.length > 0
         ? args.expensesDetail.map((e) => [
             fmtDate(e.date),
-            e.category,
-            e.description,
+            rtl(e.category),
+            rtl(e.description),
             fmt(e.amount),
           ])
-        : [["—", "—", "لا توجد مصروفات في هذه السنة", "—"]],
+        : [["—", "—", rtl("لا توجد مصروفات في هذه السنة"), "—"]],
     foot:
       args.expensesDetail.length > 0
         ? [
             [
               "",
               "",
-              "الإجمالي",
+              rtl("الإجمالي"),
               fmt(args.yearTotals.generalExpenses),
             ],
           ]
@@ -176,27 +207,27 @@ export async function exportMonthlyReportPdf(args: ExportArgs): Promise<void> {
     nextY = 60;
   }
   doc.setFontSize(13);
-  doc.text("تفاصيل مدفوعات العمال", pageWidth - 40, nextY, { align: "right" });
+  doc.text(rtl("تفاصيل مدفوعات العمال"), pageWidth - 40, nextY, { align: "right" });
 
   autoTable(doc, {
     startY: nextY + 10,
-    head: [["التاريخ", "العامل", "الفترة", "المبلغ"]],
+    head: [[rtl("التاريخ"), rtl("العامل"), rtl("الفترة"), rtl("المبلغ")]],
     body:
       args.workerPaymentsDetail.length > 0
         ? args.workerPaymentsDetail.map((w) => [
             fmtDate(w.date),
-            w.worker,
-            w.period,
+            rtl(w.worker),
+            rtl(w.period),
             fmt(w.amount),
           ])
-        : [["—", "—", "لا توجد مدفوعات في هذه السنة", "—"]],
+        : [["—", "—", rtl("لا توجد مدفوعات في هذه السنة"), "—"]],
     foot:
       args.workerPaymentsDetail.length > 0
         ? [
             [
               "",
               "",
-              "الإجمالي",
+              rtl("الإجمالي"),
               fmt(args.yearTotals.workerPayments),
             ],
           ]
@@ -223,12 +254,13 @@ export async function exportMonthlyReportPdf(args: ExportArgs): Promise<void> {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.text(
-      `صفحة ${i} من ${pageCount}`,
+      rtl(`صفحة ${i} من ${pageCount}`),
       pageWidth / 2,
       doc.internal.pageSize.getHeight() - 20,
       { align: "center" },
     );
   }
 
-  doc.save(`تقرير-المصروفات-${args.year}.pdf`);
+  doc.save(`expenses-report-${args.year}.pdf`);
+  return { usedArabicFont: Boolean(font.base64), fontSource: font.source };
 }

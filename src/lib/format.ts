@@ -96,6 +96,9 @@ export const eventTypeLabels: Record<string, string> = {
   birthday: "عيد ميلاد",
   graduation: "تخرج",
   corporate: "مناسبة شركة",
+  fadhaniya: "فضانية",
+  sahriya: "سهرية",
+  najma: "نجمة",
   other: "أخرى",
 };
 

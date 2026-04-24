@@ -97,6 +97,10 @@ export function BookingDialog({ open, onOpenChange, defaultDate, onSaved }: Book
     const guestsCount = Number.isNaN(parsedGuests) ? null : parsedGuests;
     const eventDate = fd.get("event_date") as string;
     const eventType = fd.get("event_type") as keyof typeof eventTypeLabels;
+    const customerPhone2 = ((fd.get("customer_phone2") as string) || "").trim();
+    const customerIdentityNumber = ((fd.get("customer_identity_number") as string) || "").trim();
+    const eventStartTime = ((fd.get("event_start_time") as string) || "").trim();
+    const eventEndTime = ((fd.get("event_end_time") as string) || "").trim();
     const notes = ((fd.get("notes") as string) || "").trim();
     const selectedServices = [
       services.hall ? "إيجار القاعة" : null,
@@ -118,6 +122,10 @@ export function BookingDialog({ open, onOpenChange, defaultDate, onSaved }: Book
           guestsCount,
           totalPrice: total,
           paidAmount: paid,
+          customerPhone2: customerPhone2 || null,
+          customerIdentityNumber: customerIdentityNumber || null,
+          eventStartTime: eventStartTime || null,
+          eventEndTime: eventEndTime || null,
           notes: notes || null,
           services,
         },
@@ -144,6 +152,10 @@ export function BookingDialog({ open, onOpenChange, defaultDate, onSaved }: Book
             paymentStatus: total - paid <= 0 ? "full" : "partial",
             services: selectedServices,
             notes: notes || null,
+            customerPhone2: customerPhone2 || null,
+            customerIdentityNumber: customerIdentityNumber || null,
+            eventStartTime: eventStartTime || null,
+            eventEndTime: eventEndTime || null,
           },
           preparedPrintWindow,
         );
@@ -258,6 +270,28 @@ export function BookingDialog({ open, onOpenChange, defaultDate, onSaved }: Book
                 value={totalPrice}
                 onChange={(e) => setTotalPrice(e.target.value)}
               />
+            </div>
+          </div>
+
+          <div className="space-y-3 p-4 bg-secondary/40 rounded-lg">
+            <Label className="text-base">بيانات العقد الإضافية</Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="customer_phone2">رقم الهاتف 2</Label>
+                <Input id="customer_phone2" name="customer_phone2" dir="ltr" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="customer_identity_number">رقم الهوية</Label>
+                <Input id="customer_identity_number" name="customer_identity_number" dir="ltr" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="event_start_time">من الساعة</Label>
+                <Input id="event_start_time" name="event_start_time" type="time" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="event_end_time">إلى الساعة</Label>
+                <Input id="event_end_time" name="event_end_time" type="time" />
+              </div>
             </div>
           </div>
 
