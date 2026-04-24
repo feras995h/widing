@@ -54,6 +54,9 @@ function formatSlashDate(dateIso: string): string {
   return `${year}/${month}/${day}`;
 }
 
+/** اسم ممثل الصالة في قسم التوقيعات (يطابق نص العقد). */
+const VENUE_PARTY1_SIGNATORY_NAME = "إدارة صالة فيلورا للمناسبات";
+
 function formatWeekday(dateIso: string): string {
   return new Intl.DateTimeFormat("ar-LY", { weekday: "long" }).format(new Date(dateIso));
 }
@@ -163,16 +166,16 @@ function renderHtml(data: BookingReceiptData): string {
 
             <section class="contract-clause contract-signatures">
               <p>توقيع الطرف الأول ( صالة فيلورا ) :</p>
-              <p class="contract-line">الاسم: <span class="fill">__________________</span></p>
-              <p class="contract-line">التوقيع: <span class="fill">________________</span></p>
+              <p class="contract-line">الاسم: <span class="fill">${esc(VENUE_PARTY1_SIGNATORY_NAME)}</span></p>
+              <p class="contract-line">التوقيع: <span id="contractParty1SigMain" class="fill contract-sig-slot">________________</span></p>
               <p>توقيع الطرف الثاني ( العميل ) :</p>
-              <p class="contract-line">الاسم: <span class="fill">__________________</span></p>
-              <p class="contract-line">التوقيع: <span class="fill">________________</span></p>
-              <p class="contract-line">تاريخ توقيع العقد: ( <span class="fill">_________/______/______</span> )</p>
+              <p class="contract-line">الاسم: <span class="fill">${esc(data.customerName)}</span></p>
+              <p class="contract-line">التوقيع: <span class="fill contract-sig-slot contract-sig-client">________________</span></p>
+              <p class="contract-line">تاريخ توقيع العقد: ( <span class="fill">${esc(formatSlashDate(data.issuedAt))}</span> )</p>
               <p>يقر الطرف الثاني بأنه استلم نسخة من هذا العقد بعد التوقيع :</p>
-              <p>نعم ☐   لا ☐</p>
-              <p class="contract-line">توقيع الطرف الأول ( الصالة ) : <span class="fill">_______</span></p>
-              <p class="contract-line">توقيع الطرف الثاني ( العميل ) : <span class="fill">_______</span></p>
+              <p class="contract-receipt-ack"><span class="ack-yes">نعم ☑</span><span class="ack-no">لا ☐</span></p>
+              <p class="contract-line">توقيع الطرف الأول ( الصالة ) : <span id="contractParty1SigShort" class="fill contract-sig-slot">_______</span></p>
+              <p class="contract-line">توقيع الطرف الثاني ( العميل ) : <span class="fill contract-sig-slot contract-sig-client">_______</span></p>
             </section>
           </div>
         </section>`;
@@ -505,6 +508,30 @@ function renderHtml(data: BookingReceiptData): string {
       .fill {
         font-weight: 700;
       }
+      .contract-sig-slot {
+        display: inline-block;
+        min-width: 7em;
+        vertical-align: bottom;
+      }
+      .contract-sig-slot img {
+        max-width: 220px;
+        max-height: 48px;
+        object-fit: contain;
+        vertical-align: bottom;
+      }
+      .contract-sig-client {
+        border-bottom: 1px solid #c4b59a;
+        min-height: 1.35em;
+      }
+      .contract-receipt-ack {
+        margin: 4px 0 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.25rem;
+        align-items: center;
+      }
+      .contract-receipt-ack .ack-yes { font-weight: 700; }
+      .contract-receipt-ack .ack-no { color: #6a5e48; }
       .contract-signatures {
         border-top-style: solid;
       }
@@ -805,8 +832,13 @@ function renderHtml(data: BookingReceiptData): string {
 
         const applySignature = () => {
           const url = canvas.toDataURL("image/png");
-          preview.innerHTML = '<img alt="staff-signature" src="' + url + '" />';
+          const imgHtml = '<img alt="توقيع ممثل الصالة" src="' + url + '" />';
+          preview.innerHTML = imgHtml;
           dateEl.textContent = "تم الاعتماد: " + new Date().toLocaleString("ar-LY-u-nu-latn");
+          const main = document.getElementById("contractParty1SigMain");
+          const short = document.getElementById("contractParty1SigShort");
+          if (main) main.innerHTML = imgHtml;
+          if (short) short.innerHTML = imgHtml;
         };
 
         const doPrint = () => {
