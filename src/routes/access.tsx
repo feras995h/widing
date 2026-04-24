@@ -39,6 +39,7 @@ interface MergedUser {
   email: string;
   createdAt: string;
   role: CoolifyRole | null;
+  isActive: boolean;
 }
 
 const roleLabels: Record<CoolifyRole, string> = {
@@ -49,9 +50,12 @@ const roleLabels: Record<CoolifyRole, string> = {
 function AccessManagementPage() {
   const [loading, setLoading] = useState(true);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<MergedUser[]>([]);
   const [draftRoles, setDraftRoles] = useState<Record<string, CoolifyRole>>({});
+  const [draftPasswords, setDraftPasswords] = useState<Record<string, string>>({});
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newUserName, setNewUserName] = useState("");
@@ -72,6 +76,7 @@ function AccessManagementPage() {
         email: u.email?.trim() || "—",
         createdAt: u.createdAt,
         role: u.role,
+        isActive: u.isActive,
       }));
       const initialDrafts: Record<string, CoolifyRole> = {};
       merged.forEach((u) => {
@@ -157,6 +162,7 @@ function AccessManagementPage() {
           email: u.email?.trim() || "—",
           createdAt: u.createdAt,
           role: u.role,
+          isActive: true,
         },
         ...prev,
       ]);
@@ -171,6 +177,60 @@ function AccessManagementPage() {
       toast.error("فشل إنشاء المستخدم", { description: message });
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function toggleUserActive(user: MergedUser) {
+    if (currentUserId === user.id && user.isActive) {
+      toast.error("لا يمكن تعطيل حسابك الحالي");
+      return;
+    }
+    const actionLabel = user.isActive ? "تعطيل" : "إعادة تفعيل";
+    const ok = window.confirm(`هل تريد ${actionLabel} حساب ${user.fullName}؟`);
+    if (!ok) return;
+
+    setTogglingUserId(user.id);
+    try {
+      const { setUserActiveByOwnerFn } = await import("@/lib/coolify-auth");
+      await setUserActiveByOwnerFn({
+        headers: sessionHeaders(),
+        data: { userId: user.id, isActive: !user.isActive },
+      });
+      setUsers((prev) =>
+        prev.map((u) => (u.id === user.id ? { ...u, isActive: !u.isActive } : u)),
+      );
+      toast.success(user.isActive ? "تم تعطيل الحساب" : "تمت إعادة تفعيل الحساب");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "تعذر تحديث حالة الحساب";
+      toast.error("فشل العملية", { description: message });
+    } finally {
+      setTogglingUserId(null);
+    }
+  }
+
+  async function resetUserPassword(user: MergedUser) {
+    const newPassword = (draftPasswords[user.id] || "").trim();
+    if (newPassword.length < 6) {
+      toast.error("كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل");
+      return;
+    }
+    const ok = window.confirm(`تأكيد إعادة تعيين كلمة مرور ${user.fullName}؟`);
+    if (!ok) return;
+
+    setResettingUserId(user.id);
+    try {
+      const { resetUserPasswordByOwnerFn } = await import("@/lib/coolify-auth");
+      await resetUserPasswordByOwnerFn({
+        headers: sessionHeaders(),
+        data: { userId: user.id, newPassword },
+      });
+      setDraftPasswords((prev) => ({ ...prev, [user.id]: "" }));
+      toast.success("تمت إعادة تعيين كلمة المرور");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "تعذر إعادة تعيين كلمة المرور";
+      toast.error("فشل إعادة التعيين", { description: message });
+    } finally {
+      setResettingUserId(null);
     }
   }
 
@@ -256,8 +316,11 @@ function AccessManagementPage() {
                   <TableHead className="text-right">الاسم</TableHead>
                   <TableHead className="text-right">البريد الإلكتروني</TableHead>
                   <TableHead className="text-right">الدور الحالي</TableHead>
+                  <TableHead className="text-right">الحالة</TableHead>
                   <TableHead className="text-right">الدور الجديد</TableHead>
-                  <TableHead className="text-right">إجراء</TableHead>
+                  <TableHead className="text-right">الصلاحية</TableHead>
+                  <TableHead className="text-right">الحساب</TableHead>
+                  <TableHead className="text-right">إعادة تعيين كلمة المرور</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -277,6 +340,11 @@ function AccessManagementPage() {
                         ) : (
                           <Badge variant="outline">غير محددة</Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant={u.isActive ? "default" : "outline"}>
+                          {u.isActive ? "نشط" : "معطل"}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <Select
@@ -306,6 +374,44 @@ function AccessManagementPage() {
                         >
                           {savingUserId === u.id ? "جارٍ الحفظ..." : "حفظ"}
                         </Button>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant={u.isActive ? "destructive" : "outline"}
+                          onClick={() => void toggleUserActive(u)}
+                          disabled={togglingUserId === u.id || (currentUserId === u.id && u.isActive)}
+                        >
+                          {togglingUserId === u.id
+                            ? "جارٍ التنفيذ..."
+                            : u.isActive
+                              ? "تعطيل"
+                              : "إعادة تفعيل"}
+                        </Button>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                          <Input
+                            type="password"
+                            dir="ltr"
+                            minLength={6}
+                            placeholder="كلمة مرور جديدة"
+                            value={draftPasswords[u.id] ?? ""}
+                            onChange={(e) =>
+                              setDraftPasswords((prev) => ({ ...prev, [u.id]: e.target.value }))
+                            }
+                            className="min-w-[180px]"
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => void resetUserPassword(u)}
+                            disabled={
+                              resettingUserId === u.id || (draftPasswords[u.id] ?? "").trim().length < 6
+                            }
+                          >
+                            {resettingUserId === u.id ? "جارٍ التحديث..." : "إعادة التعيين"}
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   );

@@ -246,6 +246,63 @@ export async function updateUserRole(input: { userId: string; role: CoolifyRole 
   return { ok: true };
 }
 
+export async function setUserActiveByOwner(input: { userId: string; isActive: boolean }) {
+  const current = await requireOwnerUser();
+  if (current.id === input.userId && !input.isActive) {
+    throw new Error("لا يمكن تعطيل حسابك الحالي");
+  }
+
+  const targetRes = await db.query(
+    `SELECT id, role, is_active FROM app_users WHERE id = $1 LIMIT 1`,
+    [input.userId],
+  );
+  const target = targetRes.rows[0];
+  if (!target) throw new Error("المستخدم غير موجود");
+
+  if (!input.isActive && (target.role as CoolifyRole) === "owner") {
+    const ownersRes = await db.query(
+      `SELECT COUNT(*)::int AS count FROM app_users WHERE role = 'owner' AND is_active = TRUE AND id <> $1`,
+      [input.userId],
+    );
+    const activeOwnersLeft = Number((ownersRes.rows[0] as { count: number }).count ?? 0);
+    if (activeOwnersLeft <= 0) {
+      throw new Error("لا يمكن تعطيل آخر مدير نشط في النظام");
+    }
+  }
+
+  await db.query(`UPDATE app_users SET is_active = $1 WHERE id = $2`, [input.isActive, input.userId]);
+
+  if (!input.isActive) {
+    await db.query(`DELETE FROM app_sessions WHERE user_id = $1`, [input.userId]);
+  }
+
+  return { ok: true };
+}
+
+export async function resetUserPasswordByOwner(input: { userId: string; newPassword: string }) {
+  await requireOwnerUser();
+  const password = input.newPassword.trim();
+  if (password.length < 6) {
+    throw new Error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+  }
+
+  const hash = await bcrypt.hash(password, 12);
+  const result = await db.query(
+    `
+      UPDATE app_users
+      SET password_hash = $1
+      WHERE id = $2
+      RETURNING id
+    `,
+    [hash, input.userId],
+  );
+
+  if (!result.rows[0]) throw new Error("المستخدم غير موجود");
+
+  await db.query(`DELETE FROM app_sessions WHERE user_id = $1`, [input.userId]);
+  return { ok: true };
+}
+
 export async function createUserByOwner(input: {
   email: string;
   password: string;
@@ -528,38 +585,70 @@ export async function createBooking(input: {
   try {
     await client.query("BEGIN");
 
+    const addDaysToYmd = (ymd: string, days: number): string => {
+      const [y, m, d] = ymd.split("-").map(Number);
+      const date = new Date(y, (m || 1) - 1, d || 1);
+      date.setDate(date.getDate() + days);
+      const ny = date.getFullYear();
+      const nm = String(date.getMonth() + 1).padStart(2, "0");
+      const nd = String(date.getDate()).padStart(2, "0");
+      return `${ny}-${nm}-${nd}`;
+    };
+    const toDateTime = (ymd: string, hhmm: string): Date => {
+      const [y, m, d] = ymd.split("-").map(Number);
+      const [h, min] = hhmm.split(":").map(Number);
+      return new Date(y, (m || 1) - 1, d || 1, h || 0, min || 0, 0, 0);
+    };
+    const buildBookingRange = (
+      ymd: string,
+      start: string | null,
+      end: string | null,
+    ): { start: Date; end: Date } => {
+      if (!start || !end) {
+        const dayStart = toDateTime(ymd, "00:00");
+        const dayEnd = toDateTime(addDaysToYmd(ymd, 1), "00:00");
+        return { start: dayStart, end: dayEnd };
+      }
+      const startAt = toDateTime(ymd, start);
+      let endAt = toDateTime(ymd, end);
+      if (end <= start) {
+        endAt = toDateTime(addDaysToYmd(ymd, 1), end);
+      }
+      return { start: startAt, end: endAt };
+    };
+    const overlaps = (
+      a: { start: Date; end: Date },
+      b: { start: Date; end: Date },
+    ): boolean => a.start < b.end && a.end > b.start;
+
     const cleanStart = input.eventStartTime?.trim() || null;
     const cleanEnd = input.eventEndTime?.trim() || null;
     if ((cleanStart && !cleanEnd) || (!cleanStart && cleanEnd)) {
       throw new Error("يجب إدخال وقت البداية والنهاية معًا");
     }
-    if (cleanStart && cleanEnd && cleanStart >= cleanEnd) {
-      throw new Error("وقت نهاية المناسبة يجب أن يكون بعد وقت البداية");
+    // Prevent concurrent conflicting bookings across day boundary.
+    const lockDates = [addDaysToYmd(input.eventDate, -1), input.eventDate, addDaysToYmd(input.eventDate, 1)];
+    for (const lockDate of lockDates) {
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [lockDate]);
     }
-
-    // Prevent concurrent conflicting bookings on the same event date.
-    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [input.eventDate]);
 
     const existingRes = await client.query(
       `
-        SELECT event_start_time, event_end_time
+        SELECT event_date, event_start_time, event_end_time
         FROM bookings
-        WHERE event_date = $1
+        WHERE event_date BETWEEN $1 AND $2
           AND COALESCE(status, 'confirmed') <> 'cancelled'
       `,
-      [input.eventDate],
+      [addDaysToYmd(input.eventDate, -1), addDaysToYmd(input.eventDate, 1)],
     );
 
+    const newRange = buildBookingRange(input.eventDate, cleanStart, cleanEnd);
     const hasConflict = existingRes.rows.some((row) => {
+      const existingDate = String(row.event_date).slice(0, 10);
       const existingStart = (row.event_start_time as string | null)?.trim() || null;
       const existingEnd = (row.event_end_time as string | null)?.trim() || null;
-
-      // If one booking has no times, treat same-day booking as conflicting for safety.
-      if (!cleanStart || !cleanEnd || !existingStart || !existingEnd) {
-        return true;
-      }
-
-      return cleanStart < existingEnd && cleanEnd > existingStart;
+      const existingRange = buildBookingRange(existingDate, existingStart, existingEnd);
+      return overlaps(newRange, existingRange);
     });
 
     if (hasConflict) {

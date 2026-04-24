@@ -58,3 +58,17 @@ export const createUserByOwnerFn = createServerFn({ method: "POST" }).handler(
     return services.createUserByOwner(data);
   },
 );
+
+export const setUserActiveByOwnerFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { userId: string; isActive: boolean } }) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.setUserActiveByOwner(data);
+  },
+);
+
+export const resetUserPasswordByOwnerFn = createServerFn({ method: "POST" }).handler(
+  async ({ data }: { data: { userId: string; newPassword: string } }) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.resetUserPasswordByOwner(data);
+  },
+);

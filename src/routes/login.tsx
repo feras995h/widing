@@ -141,6 +141,22 @@ function LoginPage() {
               dir="ltr"
             />
           </div>
+          <div className="text-sm flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">نسيت كلمة المرور؟</span>
+            <Button
+              type="button"
+              variant="link"
+              className="h-auto p-0"
+              onClick={() =>
+                toast.info("استرداد كلمة المرور عبر المالك", {
+                  description:
+                    "يرجى التواصل مع مدير النظام ليقوم بإعادة تعيين كلمة المرور من صفحة إدارة المستخدمين.",
+                })
+              }
+            >
+              طلب استرداد
+            </Button>
+          </div>
           <Button type="submit" className="w-full bg-gradient-primary" disabled={loading}>
             {loading && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
             دخول

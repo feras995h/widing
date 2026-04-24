@@ -131,6 +131,34 @@ function DashboardPage() {
     [bookings],
   );
 
+  const searchMatches = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    if (!q) return [];
+    const digitsQuery = q.replace(/\s/g, "");
+    return activeBookings
+      .filter(
+        (b) =>
+          b.customers.full_name.toLowerCase().includes(q) ||
+          b.customers.phone.replace(/\s/g, "").includes(digitsQuery),
+      )
+      .sort((a, b) => {
+        const pa = partsFromYmd(a.event_date);
+        const pb = partsFromYmd(b.event_date);
+        if (!pa || !pb) return 0;
+        const da = new Date(pa.y, pa.m0, pa.d).getTime();
+        const db = new Date(pb.y, pb.m0, pb.d).getTime();
+        return da - db;
+      });
+  }, [activeBookings, customerSearch]);
+
+  useEffect(() => {
+    if (searchMatches.length === 0) return;
+    const target = partsFromYmd(searchMatches[0].event_date);
+    if (!target) return;
+    if (currentMonth.getFullYear() === target.y && currentMonth.getMonth() === target.m0) return;
+    setCurrentMonth(new Date(target.y, target.m0, 1));
+  }, [searchMatches, currentMonth]);
+
   function bookingsOnDay(date: Date | null) {
     if (!date) return [];
     const key = localDateKey(date);

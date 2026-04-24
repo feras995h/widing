@@ -176,12 +176,125 @@ function ReportsPage() {
     [workerPayments, year],
   );
 
+  const pdfData = useMemo(() => {
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      monthIndex: i,
+      monthLabel: [
+        "يناير",
+        "فبراير",
+        "مارس",
+        "أبريل",
+        "مايو",
+        "يونيو",
+        "يوليو",
+        "أغسطس",
+        "سبتمبر",
+        "أكتوبر",
+        "نوفمبر",
+        "ديسمبر",
+      ][i],
+      bookingContracted: 0,
+      bookingPaidOnBookings: 0,
+      cashRevenue: 0,
+      generalExpenses: 0,
+      workerPayments: 0,
+      netProfit: 0,
+    }));
+
+    const yearBookings = bookings.filter((b: any) => new Date(b.event_date).getFullYear() === year);
+    const yearActiveBookings = yearBookings.filter((b: any) => b.status !== "cancelled");
+    const yearCancelledBookings = yearBookings.filter((b: any) => b.status === "cancelled");
+    const activeBookingIds = new Set(yearActiveBookings.map((b: any) => String(b.id)));
+
+    yearActiveBookings.forEach((b: any) => {
+      const d = new Date(b.event_date);
+      const total = Number(b.total_price) || 0;
+      const paid = Array.isArray(b.payments)
+        ? b.payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0)
+        : 0;
+      months[d.getMonth()].bookingContracted += total;
+      months[d.getMonth()].bookingPaidOnBookings += paid;
+    });
+
+    const activePaymentsInYear = payments.filter(
+      (p: any) =>
+        new Date(p.payment_date).getFullYear() === year && activeBookingIds.has(String(p.booking_id)),
+    );
+    activePaymentsInYear.forEach((p: any) => {
+      const d = new Date(p.payment_date);
+      months[d.getMonth()].cashRevenue += Number(p.amount) || 0;
+    });
+
+    expenses.forEach((e: any) => {
+      const d = new Date(e.expense_date);
+      if (d.getFullYear() === year) months[d.getMonth()].generalExpenses += Number(e.amount) || 0;
+    });
+    workerPayments.forEach((w: any) => {
+      const d = new Date(w.payment_date);
+      if (d.getFullYear() === year) months[d.getMonth()].workerPayments += Number(w.amount) || 0;
+    });
+
+    months.forEach((m) => {
+      m.netProfit = m.cashRevenue - m.generalExpenses - m.workerPayments;
+    });
+
+    const yearTotals = months.reduce(
+      (acc, m) => ({
+        bookingContracted: acc.bookingContracted + m.bookingContracted,
+        bookingPaidOnBookings: acc.bookingPaidOnBookings + m.bookingPaidOnBookings,
+        cashRevenue: acc.cashRevenue + m.cashRevenue,
+        generalExpenses: acc.generalExpenses + m.generalExpenses,
+        workerPayments: acc.workerPayments + m.workerPayments,
+        netProfit: acc.netProfit + m.netProfit,
+        bookingDue: 0,
+      }),
+      {
+        bookingContracted: 0,
+        bookingPaidOnBookings: 0,
+        cashRevenue: 0,
+        generalExpenses: 0,
+        workerPayments: 0,
+        netProfit: 0,
+        bookingDue: 0,
+      },
+    );
+    yearTotals.bookingDue = Math.max(0, yearTotals.bookingContracted - yearTotals.bookingPaidOnBookings);
+
+    const bookingDetails = yearActiveBookings.map((b: any) => {
+      const paid = Array.isArray(b.payments)
+        ? b.payments.reduce((s: number, p: any) => s + Number(p.amount || 0), 0)
+        : 0;
+      const total = Number(b.total_price) || 0;
+      return {
+        date: b.event_date,
+        customer: b.customers?.full_name ?? "—",
+        eventType: eventTypeLabels[b.event_type] ?? b.event_type,
+        total,
+        paid,
+        due: Math.max(0, total - paid),
+      };
+    });
+
+    return {
+      monthlyBreakdown: months,
+      yearTotals,
+      overview: {
+        activeBookingsCount: yearActiveBookings.length,
+        cancelledBookingsCount: yearCancelledBookings.length,
+        activeCustomerPaymentsCount: activePaymentsInYear.length,
+      },
+      bookingDetails,
+    };
+  }, [bookings, payments, expenses, workerPayments, year]);
+
   async function handleExportPdf() {
     try {
       const result = await exportMonthlyReportPdf({
         year,
-        monthlyBreakdown,
-        yearTotals,
+        monthlyBreakdown: pdfData.monthlyBreakdown,
+        yearTotals: pdfData.yearTotals,
+        overview: pdfData.overview,
+        bookingDetails: pdfData.bookingDetails,
         expensesDetail: yearExpensesDetail.map((e: any) => ({
           date: e.expense_date,
           category: expenseCategoryLabels[e.category] ?? e.category,
@@ -197,14 +310,16 @@ function ReportsPage() {
       });
       if (result.fontSource === "none") {
         toast.success("تم تصدير التقرير", {
-          description: "تم التصدير بخط احتياطي لأن الخط العربي لم يتم تحميله.",
+          description: "تم تصدير الملف الشامل بخط احتياطي لأن الخط العربي لم يتم تحميله.",
         });
       } else if (result.fontSource === "cdn") {
         toast.success("تم تصدير التقرير", {
-          description: "تم استخدام خط عربي احتياطي عبر الإنترنت.",
+          description: "تم تصدير الملف الشامل باستخدام خط عربي احتياطي عبر الإنترنت.",
         });
       } else {
-        toast.success("تم تصدير التقرير");
+        toast.success("تم تصدير التقرير", {
+          description: "تم تنزيل ملف PDF شامل واحد.",
+        });
       }
     } catch (err: any) {
       toast.error("فشل التصدير", { description: err?.message });

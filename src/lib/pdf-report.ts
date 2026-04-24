@@ -5,15 +5,41 @@ import { formatLYD } from "@/lib/format";
 interface MonthlyRow {
   monthIndex: number;
   monthLabel: string;
+  bookingContracted: number;
+  bookingPaidOnBookings: number;
+  cashRevenue: number;
   generalExpenses: number;
   workerPayments: number;
+  netProfit: number;
+}
+
+interface BookingDetailRow {
+  date: string;
+  customer: string;
+  eventType: string;
   total: number;
+  paid: number;
+  due: number;
 }
 
 interface ExportArgs {
   year: number;
   monthlyBreakdown: MonthlyRow[];
-  yearTotals: { generalExpenses: number; workerPayments: number; total: number };
+  yearTotals: {
+    bookingContracted: number;
+    bookingPaidOnBookings: number;
+    cashRevenue: number;
+    generalExpenses: number;
+    workerPayments: number;
+    netProfit: number;
+    bookingDue: number;
+  };
+  overview: {
+    activeBookingsCount: number;
+    cancelledBookingsCount: number;
+    activeCustomerPaymentsCount: number;
+  };
+  bookingDetails: BookingDetailRow[];
   expensesDetail: { date: string; category: string; description: string; amount: number }[];
   workerPaymentsDetail: { date: string; worker: string; period: string; amount: number }[];
 }
@@ -26,6 +52,7 @@ interface FontLoadResult {
 interface ExportResult {
   usedArabicFont: boolean;
   fontSource: "local" | "cdn" | "none";
+  exportedFiles: string[];
 }
 
 let cachedFont: FontLoadResult | null = null;
@@ -76,11 +103,19 @@ function fmtDate(s: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export async function exportMonthlyReportPdf(args: ExportArgs): Promise<ExportResult> {
-  const rtl = (value: string) => `\u202B${value}\u202C`;
-  const font = await loadArabicFont();
-  const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
+function fmtTodayDate() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 
+function toArabic(doc: jsPDF, value: string): string {
+  const processArabic = (doc as { processArabic?: (txt: string) => string }).processArabic;
+  const text = String(value ?? "");
+  return typeof processArabic === "function" ? processArabic(text) : text;
+}
+
+function createDocWithFont(font: FontLoadResult): jsPDF {
+  const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
   if (font.base64) {
     doc.addFileToVFS("Amiri-Regular.ttf", font.base64);
     doc.addFont("Amiri-Regular.ttf", "Amiri", "normal");
@@ -88,49 +123,131 @@ export async function exportMonthlyReportPdf(args: ExportArgs): Promise<ExportRe
   } else {
     doc.setFont("helvetica", "normal");
   }
-  (doc as { setR2L?: (value: boolean) => void }).setR2L?.(true);
+  return doc;
+}
+
+function addPageNumbers(doc: jsPDF) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.text(
+      toArabic(doc, `صفحة ${i} من ${pageCount}`),
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 20,
+      { align: "center" },
+    );
+  }
+}
+
+export async function exportMonthlyReportPdf(args: ExportArgs): Promise<ExportResult> {
+  const font = await loadArabicFont();
+  const exportedFiles: string[] = [];
+  const doc = createDocWithFont(font);
 
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // Header
   doc.setFontSize(18);
-  doc.text(rtl("تقرير المصروفات السنوي - Veloura Venue"), pageWidth / 2, 50, {
+  doc.text(toArabic(doc, "التقرير المالي الشامل السنوي - Veloura Venue"), pageWidth / 2, 50, {
     align: "center",
   });
   doc.setFontSize(12);
-  doc.text(rtl(`السنة: ${args.year}`), pageWidth / 2, 72, { align: "center" });
-  doc.setFontSize(9);
-  doc.text(
-    rtl(`تاريخ التصدير: ${new Date().toLocaleDateString("ar-LY", { numberingSystem: "latn" })}`),
-    pageWidth / 2,
-    88,
-    { align: "center" },
-  );
+  doc.text(toArabic(doc, `السنة: ${args.year}`), pageWidth / 2, 72, { align: "center" });
+  doc.setFontSize(10);
+  doc.text(toArabic(doc, `تاريخ التصدير: ${fmtTodayDate()}`), pageWidth / 2, 88, {
+    align: "center",
+  });
+  doc.setDrawColor(201, 169, 97);
+  doc.setLineWidth(1);
+  doc.line(40, 100, pageWidth - 40, 100);
 
-  // Section 1: Monthly summary
+  // Section 1: Year financial overview
   doc.setFontSize(13);
-  doc.text(rtl("الملخص الشهري"), pageWidth - 40, 120, { align: "right" });
-
+  doc.text(toArabic(doc, "الملخص المالي السنوي"), pageWidth - 40, 124, { align: "right" });
   autoTable(doc, {
-    startY: 130,
-    head: [[rtl("الشهر"), rtl("مصروفات عامة"), rtl("رواتب العمال"), rtl("الإجمالي")]],
-    body: args.monthlyBreakdown.map((m) => [
-      rtl(m.monthLabel),
-      m.generalExpenses ? fmt(m.generalExpenses) : "-",
-      m.workerPayments ? fmt(m.workerPayments) : "-",
-      m.total ? fmt(m.total) : "-",
-    ]),
-    foot: [
+    startY: 132,
+    head: [[toArabic(doc, "المؤشر"), toArabic(doc, "القيمة")]],
+    body: [
+      [toArabic(doc, "قيمة التعاقدات"), fmt(args.yearTotals.bookingContracted)],
+      [toArabic(doc, "المدفوع على الحجوزات"), fmt(args.yearTotals.bookingPaidOnBookings)],
+      [toArabic(doc, "المتبقي المستحق"), fmt(args.yearTotals.bookingDue)],
+      [toArabic(doc, "الإيراد المحصل (دفعات العملاء)"), fmt(args.yearTotals.cashRevenue)],
+      [toArabic(doc, "المصروفات العامة"), fmt(args.yearTotals.generalExpenses)],
+      [toArabic(doc, "رواتب العمال"), fmt(args.yearTotals.workerPayments)],
+      [toArabic(doc, "صافي الربح"), fmt(args.yearTotals.netProfit)],
       [
-        rtl("إجمالي السنة"),
-        fmt(args.yearTotals.generalExpenses),
-        fmt(args.yearTotals.workerPayments),
-        fmt(args.yearTotals.total),
+        toArabic(doc, "إحصائيات العدد"),
+        toArabic(
+          doc,
+          `نشط: ${args.overview.activeBookingsCount} | ملغى: ${args.overview.cancelledBookingsCount} | دفعات: ${args.overview.activeCustomerPaymentsCount}`,
+        ),
       ],
     ],
     styles: {
       font: "Amiri",
       fontSize: 10,
+      fontStyle: "normal",
+      halign: "right",
+      cellPadding: 6,
+    },
+    columnStyles: {
+      0: { cellWidth: 210 },
+      1: { cellWidth: "auto" },
+    },
+    headStyles: {
+      font: "Amiri",
+      fillColor: [201, 169, 97],
+      textColor: 255,
+      fontStyle: "normal",
+      halign: "right",
+    },
+    theme: "grid",
+  });
+
+  // Section 2: Monthly financial summary
+  const firstSectionEndY = (doc as any).lastAutoTable.finalY + 20;
+  doc.setFontSize(13);
+  doc.text(toArabic(doc, "الملخص الشهري المالي الشامل"), pageWidth - 40, firstSectionEndY, {
+    align: "right",
+  });
+
+  autoTable(doc, {
+    startY: firstSectionEndY + 10,
+    head: [[
+      toArabic(doc, "الشهر"),
+      toArabic(doc, "قيمة التعاقدات"),
+      toArabic(doc, "المدفوع على الحجوزات"),
+      toArabic(doc, "الإيراد المحصل"),
+      toArabic(doc, "المصروفات العامة"),
+      toArabic(doc, "رواتب العمال"),
+      toArabic(doc, "صافي الربح"),
+    ]],
+    body: args.monthlyBreakdown.map((m) => [
+      toArabic(doc, m.monthLabel),
+      m.bookingContracted ? fmt(m.bookingContracted) : "-",
+      m.bookingPaidOnBookings ? fmt(m.bookingPaidOnBookings) : "-",
+      m.cashRevenue ? fmt(m.cashRevenue) : "-",
+      m.generalExpenses ? fmt(m.generalExpenses) : "-",
+      m.workerPayments ? fmt(m.workerPayments) : "-",
+      m.netProfit ? fmt(m.netProfit) : "-",
+    ]),
+    foot: [
+      [
+        toArabic(doc, "إجمالي السنة"),
+        fmt(args.yearTotals.bookingContracted),
+        fmt(args.yearTotals.bookingPaidOnBookings),
+        fmt(args.yearTotals.cashRevenue),
+        fmt(args.yearTotals.generalExpenses),
+        fmt(args.yearTotals.workerPayments),
+        fmt(args.yearTotals.netProfit),
+      ],
+    ],
+    styles: {
+      font: "Amiri",
+      fontSize: 10,
+      fontStyle: "normal",
       halign: "right",
       cellPadding: 6,
     },
@@ -138,6 +255,7 @@ export async function exportMonthlyReportPdf(args: ExportArgs): Promise<ExportRe
       font: "Amiri",
       fillColor: [201, 169, 97],
       textColor: 255,
+      fontStyle: "normal",
       halign: "right",
     },
     footStyles: {
@@ -150,117 +268,173 @@ export async function exportMonthlyReportPdf(args: ExportArgs): Promise<ExportRe
     theme: "grid",
   });
 
-  // Section 2: General expenses detail
+  // Section 3: Bookings detail
   let nextY = (doc as any).lastAutoTable.finalY + 30;
-  if (nextY > 700) {
+  if (nextY > 500) {
     doc.addPage();
     nextY = 60;
   }
   doc.setFontSize(13);
-  doc.text(rtl("تفاصيل المصروفات العامة"), pageWidth - 40, nextY, {
+  doc.text(toArabic(doc, "تفاصيل الحجوزات النشطة"), pageWidth - 40, nextY, {
     align: "right",
   });
 
   autoTable(doc, {
     startY: nextY + 10,
-    head: [[rtl("التاريخ"), rtl("الفئة"), rtl("الوصف"), rtl("المبلغ")]],
+    head: [[
+      toArabic(doc, "التاريخ"),
+      toArabic(doc, "العميل"),
+      toArabic(doc, "نوع المناسبة"),
+      toArabic(doc, "قيمة الحجز"),
+      toArabic(doc, "المدفوع"),
+      toArabic(doc, "المتبقي"),
+    ]],
     body:
-      args.expensesDetail.length > 0
-        ? args.expensesDetail.map((e) => [
-            fmtDate(e.date),
-            rtl(e.category),
-            rtl(e.description),
-            fmt(e.amount),
+      args.bookingDetails.length > 0
+        ? args.bookingDetails.map((b) => [
+            fmtDate(b.date),
+            toArabic(doc, b.customer),
+            toArabic(doc, b.eventType),
+            fmt(b.total),
+            fmt(b.paid),
+            fmt(b.due),
           ])
-        : [["—", "—", rtl("لا توجد مصروفات في هذه السنة"), "—"]],
+        : [["—", "—", "—", toArabic(doc, "لا توجد حجوزات نشطة في هذه السنة"), "—", "—"]],
     foot:
-      args.expensesDetail.length > 0
+      args.bookingDetails.length > 0
         ? [
             [
               "",
               "",
-              rtl("الإجمالي"),
-              fmt(args.yearTotals.generalExpenses),
+              "",
+              fmt(args.yearTotals.bookingContracted),
+              fmt(args.yearTotals.bookingPaidOnBookings),
+              fmt(args.yearTotals.bookingDue),
             ],
           ]
         : undefined,
-    styles: { font: "Amiri", fontSize: 9, halign: "right", cellPadding: 5 },
+    styles: { font: "Amiri", fontSize: 9, fontStyle: "normal", halign: "right", cellPadding: 5 },
     headStyles: {
       font: "Amiri",
       fillColor: [201, 169, 97],
       textColor: 255,
+      fontStyle: "normal",
       halign: "right",
     },
     footStyles: {
       font: "Amiri",
       fillColor: [250, 247, 240],
       textColor: [92, 74, 42],
+      fontStyle: "normal",
       halign: "right",
     },
     theme: "grid",
   });
 
-  // Section 3: Worker payments detail
+  // Section 4: General expenses detail
   nextY = (doc as any).lastAutoTable.finalY + 30;
-  if (nextY > 700) {
+  if (nextY > 500) {
     doc.addPage();
     nextY = 60;
   }
   doc.setFontSize(13);
-  doc.text(rtl("تفاصيل مدفوعات العمال"), pageWidth - 40, nextY, { align: "right" });
+  doc.text(toArabic(doc, "تفاصيل المصروفات العامة"), pageWidth - 40, nextY, { align: "right" });
 
   autoTable(doc, {
     startY: nextY + 10,
-    head: [[rtl("التاريخ"), rtl("العامل"), rtl("الفترة"), rtl("المبلغ")]],
+    head: [[toArabic(doc, "التاريخ"), toArabic(doc, "الفئة"), toArabic(doc, "الوصف"), toArabic(doc, "المبلغ")]],
     body:
-      args.workerPaymentsDetail.length > 0
-        ? args.workerPaymentsDetail.map((w) => [
-            fmtDate(w.date),
-            rtl(w.worker),
-            rtl(w.period),
-            fmt(w.amount),
+      args.expensesDetail.length > 0
+        ? args.expensesDetail.map((e) => [
+            fmtDate(e.date),
+            toArabic(doc, e.category),
+            toArabic(doc, e.description),
+            fmt(e.amount),
           ])
-        : [["—", "—", rtl("لا توجد مدفوعات في هذه السنة"), "—"]],
+        : [["—", "—", toArabic(doc, "لا توجد مصروفات في هذه السنة"), "—"]],
     foot:
-      args.workerPaymentsDetail.length > 0
+      args.expensesDetail.length > 0
         ? [
             [
               "",
               "",
-              rtl("الإجمالي"),
-              fmt(args.yearTotals.workerPayments),
+              toArabic(doc, "الإجمالي"),
+              fmt(args.yearTotals.generalExpenses),
             ],
           ]
         : undefined,
-    styles: { font: "Amiri", fontSize: 9, halign: "right", cellPadding: 5 },
+    styles: { font: "Amiri", fontSize: 9, fontStyle: "normal", halign: "right", cellPadding: 5 },
     headStyles: {
       font: "Amiri",
       fillColor: [201, 169, 97],
       textColor: 255,
+      fontStyle: "normal",
       halign: "right",
     },
     footStyles: {
       font: "Amiri",
       fillColor: [250, 247, 240],
       textColor: [92, 74, 42],
+      fontStyle: "normal",
       halign: "right",
     },
     theme: "grid",
   });
 
-  // Footer page numbers
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.text(
-      rtl(`صفحة ${i} من ${pageCount}`),
-      pageWidth / 2,
-      doc.internal.pageSize.getHeight() - 20,
-      { align: "center" },
-    );
+  // Section 5: Worker payments detail
+  nextY = (doc as any).lastAutoTable.finalY + 30;
+  if (nextY > 500) {
+    doc.addPage();
+    nextY = 60;
   }
+  doc.setFontSize(13);
+  doc.text(toArabic(doc, "تفاصيل مدفوعات العمال"), pageWidth - 40, nextY, { align: "right" });
 
-  doc.save(`expenses-report-${args.year}.pdf`);
-  return { usedArabicFont: Boolean(font.base64), fontSource: font.source };
+  autoTable(doc, {
+    startY: nextY + 10,
+    head: [[toArabic(doc, "التاريخ"), toArabic(doc, "العامل"), toArabic(doc, "الفترة"), toArabic(doc, "المبلغ")]],
+    body:
+      args.workerPaymentsDetail.length > 0
+        ? args.workerPaymentsDetail.map((w) => [
+            fmtDate(w.date),
+            toArabic(doc, w.worker),
+            toArabic(doc, w.period),
+            fmt(w.amount),
+          ])
+        : [["—", "—", toArabic(doc, "لا توجد مدفوعات في هذه السنة"), "—"]],
+    foot:
+      args.workerPaymentsDetail.length > 0
+        ? [
+            [
+              "",
+              "",
+              toArabic(doc, "الإجمالي"),
+              fmt(args.yearTotals.workerPayments),
+            ],
+          ]
+        : undefined,
+    styles: { font: "Amiri", fontSize: 9, fontStyle: "normal", halign: "right", cellPadding: 5 },
+    headStyles: {
+      font: "Amiri",
+      fillColor: [201, 169, 97],
+      textColor: 255,
+      fontStyle: "normal",
+      halign: "right",
+    },
+    footStyles: {
+      font: "Amiri",
+      fillColor: [250, 247, 240],
+      textColor: [92, 74, 42],
+      fontStyle: "normal",
+      halign: "right",
+    },
+    theme: "grid",
+  });
+
+  addPageNumbers(doc);
+  const comprehensiveFile = `financial-report-full-${args.year}.pdf`;
+  doc.save(comprehensiveFile);
+  exportedFiles.push(comprehensiveFile);
+
+  return { usedArabicFont: Boolean(font.base64), fontSource: font.source, exportedFiles };
 }
