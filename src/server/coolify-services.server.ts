@@ -225,7 +225,7 @@ export async function listUsersWithRoles() {
   );
 
   return {
-    users: res.rows.map((row) => ({
+    users: res.rows.map((row: Record<string, unknown>) => ({
       id: row.id as string,
       email: row.email as string,
       fullName: (row.full_name as string | null) ?? null,
@@ -369,7 +369,9 @@ export async function getDashboardBookings() {
     `);
 
   return {
-    bookings: result.rows.map((row) => mapBookingRow(row as unknown as Record<string, unknown>)),
+    bookings: result.rows.map((row: Record<string, unknown>) =>
+      mapBookingRow(row as unknown as Record<string, unknown>),
+    ),
   };
 }
 
@@ -415,7 +417,7 @@ export async function getCustomersReport() {
     `);
 
   return {
-    customers: res.rows.map((row) => ({
+    customers: res.rows.map((row: Record<string, unknown>) => ({
       id: row.id as string,
       full_name: row.full_name as string,
       phone: (row.phone as string) || "",
@@ -480,7 +482,7 @@ export async function getCustomerDetail(input: { customerId: string }) {
     created_at: cRes.rows[0].created_at as string,
   };
 
-  const bookings = bRes.rows.map((row) => {
+  const bookings = bRes.rows.map((row: Record<string, unknown>) => {
     const pRaw = row.payments;
     const payments = Array.isArray(pRaw)
       ? (pRaw as Array<Record<string, unknown>>).map((p) => ({
@@ -545,7 +547,7 @@ export async function getWorkerDetail(input: { workerId: string }) {
     created_at: w.created_at as string,
   };
 
-  const payments = pRes.rows.map((row) => ({
+  const payments = pRes.rows.map((row: Record<string, unknown>) => ({
     id: row.id as string,
     amount: toNumber(row.amount),
     payment_date: String(row.payment_date).slice(0, 10),
@@ -585,41 +587,90 @@ export async function createBooking(input: {
   try {
     await client.query("BEGIN");
 
-    const addDaysToYmd = (ymd: string, days: number): string => {
+    const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
+    const HHMM_RE = /^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/;
+    const MINUTES_PER_DAY = 24 * 60;
+
+    const parseYmd = (ymd: string): { y: number; m: number; d: number } => {
+      if (!YMD_RE.test(ymd)) {
+        throw new Error("صيغة تاريخ المناسبة غير صحيحة");
+      }
       const [y, m, d] = ymd.split("-").map(Number);
-      const date = new Date(y, (m || 1) - 1, d || 1);
-      date.setDate(date.getDate() + days);
-      const ny = date.getFullYear();
-      const nm = String(date.getMonth() + 1).padStart(2, "0");
-      const nd = String(date.getDate()).padStart(2, "0");
+      const date = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+      if (
+        date.getUTCFullYear() !== y ||
+        date.getUTCMonth() + 1 !== m ||
+        date.getUTCDate() !== d
+      ) {
+        throw new Error("تاريخ المناسبة غير صالح");
+      }
+      return { y, m, d };
+    };
+    const daySerialFromYmd = (ymd: string): number => {
+      const { y, m, d } = parseYmd(ymd);
+      return Math.floor(Date.UTC(y, m - 1, d) / 86400000);
+    };
+    const addDaysToYmd = (ymd: string, days: number): string => {
+      const { y, m, d } = parseYmd(ymd);
+      const date = new Date(Date.UTC(y, m - 1, d));
+      date.setUTCDate(date.getUTCDate() + days);
+      const ny = date.getUTCFullYear();
+      const nm = String(date.getUTCMonth() + 1).padStart(2, "0");
+      const nd = String(date.getUTCDate()).padStart(2, "0");
       return `${ny}-${nm}-${nd}`;
     };
-    const toDateTime = (ymd: string, hhmm: string): Date => {
-      const [y, m, d] = ymd.split("-").map(Number);
-      const [h, min] = hhmm.split(":").map(Number);
-      return new Date(y, (m || 1) - 1, d || 1, h || 0, min || 0, 0, 0);
+    const parseTimeToMinutes = (
+      hhmm: string,
+      strict: boolean,
+      fieldLabel: string,
+    ): number | null => {
+      const normalized = hhmm.trim();
+      const match = normalized.match(HHMM_RE);
+      if (!match) {
+        if (!strict) return null;
+        throw new Error(`صيغة ${fieldLabel} غير صحيحة (${normalized})`);
+      }
+      const h = Number(match[1]);
+      const min = Number(match[2]);
+      if (h < 0 || h > 23 || min < 0 || min > 59) {
+        if (!strict) return null;
+        throw new Error(`قيمة ${fieldLabel} خارج النطاق (${normalized})`);
+      }
+      return h * 60 + min;
     };
     const buildBookingRange = (
       ymd: string,
       start: string | null,
       end: string | null,
-    ): { start: Date; end: Date } => {
+      strict = true,
+    ): { startMinute: number; endMinute: number } => {
+      const daySerial = daySerialFromYmd(ymd);
+      const dayStart = daySerial * MINUTES_PER_DAY;
+      const dayEnd = (daySerial + 1) * MINUTES_PER_DAY;
+
       if (!start || !end) {
-        const dayStart = toDateTime(ymd, "00:00");
-        const dayEnd = toDateTime(addDaysToYmd(ymd, 1), "00:00");
-        return { start: dayStart, end: dayEnd };
+        return { startMinute: dayStart, endMinute: dayEnd };
       }
-      const startAt = toDateTime(ymd, start);
-      let endAt = toDateTime(ymd, end);
-      if (end <= start) {
-        endAt = toDateTime(addDaysToYmd(ymd, 1), end);
+
+      const startMinutes = parseTimeToMinutes(start, strict, "وقت البداية");
+      const endMinutes = parseTimeToMinutes(end, strict, "وقت النهاية");
+
+      if (startMinutes === null || endMinutes === null) {
+        return { startMinute: dayStart, endMinute: dayEnd };
       }
-      return { start: startAt, end: endAt };
+
+      const startMinute = dayStart + startMinutes;
+      let endMinute = dayStart + endMinutes;
+      if (endMinutes <= startMinutes) {
+        endMinute += MINUTES_PER_DAY;
+      }
+
+      return { startMinute, endMinute };
     };
     const overlaps = (
-      a: { start: Date; end: Date },
-      b: { start: Date; end: Date },
-    ): boolean => a.start < b.end && a.end > b.start;
+      a: { startMinute: number; endMinute: number },
+      b: { startMinute: number; endMinute: number },
+    ): boolean => a.startMinute < b.endMinute && a.endMinute > b.startMinute;
 
     const cleanStart = input.eventStartTime?.trim() || null;
     const cleanEnd = input.eventEndTime?.trim() || null;
@@ -642,12 +693,36 @@ export async function createBooking(input: {
       [addDaysToYmd(input.eventDate, -1), addDaysToYmd(input.eventDate, 1)],
     );
 
+    const toYmd = (value: unknown): string | null => {
+      if (value instanceof Date) {
+        const y = value.getUTCFullYear();
+        const m = String(value.getUTCMonth() + 1).padStart(2, "0");
+        const d = String(value.getUTCDate()).padStart(2, "0");
+        return `${y}-${m}-${d}`;
+      }
+      if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (YMD_RE.test(trimmed)) return trimmed;
+        const head = trimmed.slice(0, 10);
+        if (YMD_RE.test(head)) return head;
+        const parsed = new Date(trimmed);
+        if (!Number.isNaN(parsed.getTime())) {
+          const y = parsed.getUTCFullYear();
+          const m = String(parsed.getUTCMonth() + 1).padStart(2, "0");
+          const d = String(parsed.getUTCDate()).padStart(2, "0");
+          return `${y}-${m}-${d}`;
+        }
+      }
+      return null;
+    };
+
     const newRange = buildBookingRange(input.eventDate, cleanStart, cleanEnd);
-    const hasConflict = existingRes.rows.some((row) => {
-      const existingDate = String(row.event_date).slice(0, 10);
+    const hasConflict = existingRes.rows.some((row: Record<string, unknown>) => {
+      const existingDate = toYmd(row.event_date);
+      if (!existingDate) return false;
       const existingStart = (row.event_start_time as string | null)?.trim() || null;
       const existingEnd = (row.event_end_time as string | null)?.trim() || null;
-      const existingRange = buildBookingRange(existingDate, existingStart, existingEnd);
+      const existingRange = buildBookingRange(existingDate, existingStart, existingEnd, false);
       return overlaps(newRange, existingRange);
     });
 
@@ -800,21 +875,21 @@ export async function getReportsData() {
   ]);
 
   return {
-    bookings: bookingsRes.rows.map((row) => ({
+    bookings: bookingsRes.rows.map((row: Record<string, unknown>) => ({
       ...mapBookingRow(row as unknown as Record<string, unknown>),
       customers: {
         full_name: (row.customer_name as string) || "—",
       },
     })),
-    payments: paymentsRes.rows.map((row) => ({
+    payments: paymentsRes.rows.map((row: Record<string, unknown>) => ({
       ...row,
       amount: toNumber(row.amount),
     })),
-    expenses: expensesRes.rows.map((row) => ({
+    expenses: expensesRes.rows.map((row: Record<string, unknown>) => ({
       ...row,
       amount: toNumber(row.amount),
     })),
-    workerPayments: workerPaymentsRes.rows.map((row) => ({
+    workerPayments: workerPaymentsRes.rows.map((row: Record<string, unknown>) => ({
       ...row,
       amount: toNumber(row.amount),
       workers: {
@@ -841,15 +916,15 @@ export async function getExpensesData() {
   ]);
 
   return {
-    expenses: expenses.rows.map((row) => ({
+    expenses: expenses.rows.map((row: Record<string, unknown>) => ({
       ...row,
       amount: toNumber(row.amount),
     })),
-    workers: workers.rows.map((row) => ({
+    workers: workers.rows.map((row: Record<string, unknown>) => ({
       ...row,
       monthly_salary: toNumber(row.monthly_salary),
     })),
-    workerPayments: workerPayments.rows.map((row) => ({
+    workerPayments: workerPayments.rows.map((row: Record<string, unknown>) => ({
       ...row,
       amount: toNumber(row.amount),
       workers: {

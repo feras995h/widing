@@ -63,7 +63,7 @@ function CustomerDetailPage() {
 
   useEffect(() => {
     getCustomerDetailFn({ headers: sessionHeaders(), data: { customerId } })
-      .then((res) => {
+      .then((res: any) => {
         const cu = res.customer as {
           id: string;
           full_name: string;
@@ -74,7 +74,7 @@ function CustomerDetailPage() {
         setBookings((res.bookings as BookingRow[]) ?? []);
         setLoading(false);
       })
-      .catch((e) => {
+      .catch((e: unknown) => {
         toast.error("تعذر تحميل بيانات العميل", {
           description: e instanceof Error ? e.message : "",
         });

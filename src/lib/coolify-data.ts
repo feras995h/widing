@@ -15,71 +15,36 @@ export const getCustomersReportFn = createServerFn({ method: "GET" }).handler(as
   return services.getCustomersReport();
 });
 
-export const getCustomerDetailFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { customerId: string } }) => {
+export const getCustomerDetailFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.getCustomerDetail(data);
   },
 );
 
-export const getWorkerDetailFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { workerId: string } }) => {
+export const getWorkerDetailFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.getWorkerDetail(data);
   },
 );
 
-export const createBookingFn = createServerFn({ method: "POST" }).handler(
-  async ({
-    data,
-  }: {
-    data: {
-      mode: "new" | "existing";
-      customerId?: string;
-      customerName?: string;
-      customerPhone?: string;
-      eventDate: string;
-      eventType: string;
-      guestsCount: number | null;
-      totalPrice: number;
-      paidAmount: number;
-      customerPhone2: string | null;
-      customerIdentityNumber: string | null;
-      eventStartTime: string | null;
-      eventEndTime: string | null;
-      notes: string | null;
-      services: {
-        hall: boolean;
-        catering: boolean;
-        decor: boolean;
-        photography: boolean;
-      };
-    };
-  }) => {
+export const createBookingFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.createBooking(data);
   },
 );
 
-export const createPaymentFn = createServerFn({ method: "POST" }).handler(
-  async ({
-    data,
-  }: {
-    data: {
-      bookingId: string;
-      amount: number;
-      paymentDate: string;
-      method: "cash" | "bank_transfer" | "card" | "other";
-      notes: string | null;
-    };
-  }) => {
+export const createPaymentFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.createPayment(data);
   },
 );
 
-export const cancelBookingFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { bookingId: string } }) => {
+export const cancelBookingFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.cancelBooking(data);
   },
@@ -95,64 +60,36 @@ export const getExpensesDataFn = createServerFn({ method: "GET" }).handler(async
   return services.getExpensesData();
 });
 
-export const addExpenseFn = createServerFn({ method: "POST" }).handler(
-  async ({
-    data,
-  }: {
-    data: {
-      category: string;
-      amount: number;
-      expenseDate: string;
-      description: string;
-    };
-  }) => {
+export const addExpenseFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.addExpense(data);
   },
 );
 
-export const deleteExpenseFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { id: string } }) => {
+export const deleteExpenseFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.deleteExpense(data);
   },
 );
 
-export const addWorkerFn = createServerFn({ method: "POST" }).handler(
-  async ({
-    data,
-  }: {
-    data: {
-      fullName: string;
-      jobTitle: string;
-      phone: string | null;
-      monthlySalary: number;
-    };
-  }) => {
+export const addWorkerFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.addWorker(data);
   },
 );
 
-export const addWorkerPaymentFn = createServerFn({ method: "POST" }).handler(
-  async ({
-    data,
-  }: {
-    data: {
-      workerId: string;
-      amount: number;
-      paymentDate: string;
-      paymentPeriod: string | null;
-      notes: string | null;
-    };
-  }) => {
+export const addWorkerPaymentFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.addWorkerPayment(data);
   },
 );
 
-export const toggleWorkerActiveFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { workerId: string; isActive: boolean } }) => {
+export const toggleWorkerActiveFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.toggleWorkerActive(data);
   },

@@ -221,11 +221,16 @@ const ChartTooltipContent = React.forwardRef<
                             {itemConfig?.label || item.name}
                           </span>
                         </div>
-                        {item.value && (
-                          <span className="font-mono font-medium tabular-nums text-foreground">
-                            {formatDecimal(item.value)}
-                          </span>
-                        )}
+                        {(() => {
+                          const numericValue =
+                            typeof item.value === "number" ? item.value : Number(item.value);
+                          if (!Number.isFinite(numericValue)) return null;
+                          return (
+                            <span className="font-mono font-medium tabular-nums text-foreground">
+                              {formatDecimal(numericValue)}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </>
                   )}

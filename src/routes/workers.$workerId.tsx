@@ -43,12 +43,12 @@ function WorkerDetailPage() {
 
   useEffect(() => {
     getWorkerDetailFn({ headers: sessionHeaders(), data: { workerId } })
-      .then((res) => {
+      .then((res: any) => {
         setWorker(res.worker as (typeof worker) & { id: string });
         setPayments((res.payments as WorkerPayRow[]) ?? []);
         setLoading(false);
       })
-      .catch((e) => {
+      .catch((e: unknown) => {
         toast.error("تعذر تحميل بيانات العامل", {
           description: e instanceof Error ? e.message : "",
         });

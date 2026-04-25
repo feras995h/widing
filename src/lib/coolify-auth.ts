@@ -8,19 +8,15 @@ export const getLoginBootstrapInfoFn = createServerFn({ method: "GET" }).handler
   return services.getLoginBootstrapInfo();
 });
 
-export const ensureOwnerAccountFn = createServerFn({ method: "POST" }).handler(
-  async ({
-    data,
-  }: {
-    data: { email: string; password: string; fullName?: string; setupKey?: string };
-  }) => {
+export const ensureOwnerAccountFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.ensureOwnerAccount(data);
   },
 );
 
-export const loginWithPasswordFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { email: string; password: string } }) => {
+export const loginWithPasswordFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.loginWithPassword(data);
   },
@@ -41,33 +37,29 @@ export const listUsersWithRolesFn = createServerFn({ method: "GET" }).handler(as
   return services.listUsersWithRoles();
 });
 
-export const updateUserRoleFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { userId: string; role: CoolifyRole } }) => {
+export const updateUserRoleFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.updateUserRole(data);
   },
 );
 
-export const createUserByOwnerFn = createServerFn({ method: "POST" }).handler(
-  async ({
-    data,
-  }: {
-    data: { email: string; password: string; fullName?: string; role: CoolifyRole };
-  }) => {
+export const createUserByOwnerFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.createUserByOwner(data);
   },
 );
 
-export const setUserActiveByOwnerFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { userId: string; isActive: boolean } }) => {
+export const setUserActiveByOwnerFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.setUserActiveByOwner(data);
   },
 );
 
-export const resetUserPasswordByOwnerFn = createServerFn({ method: "POST" }).handler(
-  async ({ data }: { data: { userId: string; newPassword: string } }) => {
+export const resetUserPasswordByOwnerFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");
     return services.resetUserPasswordByOwner(data);
   },
