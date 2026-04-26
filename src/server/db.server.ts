@@ -17,7 +17,7 @@ if (!connectionString) {
   );
 }
 
-const BOOKING_OVERLAP_VERSION = "2026-04-25-v3";
+const BOOKING_OVERLAP_VERSION = "2026-04-26-v4";
 
 const globalForDb = globalThis as unknown as {
   __velouraPool?: Pool;
@@ -84,7 +84,8 @@ async function ensureBookingOverlapProtection(): Promise<void> {
     RETURNS trigger AS $$
     DECLARE
       new_range tsrange;
-      has_conflict BOOLEAN;
+      same_day_exists BOOLEAN;
+      range_conflict BOOLEAN;
     BEGIN
       IF COALESCE(NEW.status, 'confirmed') = 'cancelled' THEN
         RETURN NEW;
@@ -95,6 +96,20 @@ async function ensureBookingOverlapProtection(): Promise<void> {
         RAISE EXCEPTION 'يجب إدخال وقت البداية والنهاية معًا';
       END IF;
 
+      -- Rule 1: only one active booking per primary event_date.
+      SELECT EXISTS (
+        SELECT 1
+        FROM bookings b
+        WHERE b.id <> NEW.id
+          AND COALESCE(b.status, 'confirmed') <> 'cancelled'
+          AND b.event_date = NEW.event_date
+      ) INTO same_day_exists;
+
+      IF same_day_exists THEN
+        RAISE EXCEPTION 'يوجد حجز آخر في نفس اليوم. لا يُسمح بأكثر من حجز واحد في اليوم.';
+      END IF;
+
+      -- Rule 2: range must not collide with spillover from previous day.
       new_range := booking_time_range(
         NEW.event_date,
         NEW.event_start_time,
@@ -107,10 +122,10 @@ async function ensureBookingOverlapProtection(): Promise<void> {
         WHERE b.id <> NEW.id
           AND COALESCE(b.status, 'confirmed') <> 'cancelled'
           AND booking_time_range(b.event_date, b.event_start_time, b.event_end_time) && new_range
-      ) INTO has_conflict;
+      ) INTO range_conflict;
 
-      IF has_conflict THEN
-        RAISE EXCEPTION 'يوجد حجز آخر في نفس التاريخ والوقت. الرجاء اختيار وقت مختلف.';
+      IF range_conflict THEN
+        RAISE EXCEPTION 'وقت الحجز يتعارض مع امتداد حجز سابق. الرجاء اختيار وقت بعد انتهاء الحجز السابق.';
       END IF;
 
       RETURN NEW;
@@ -144,10 +159,35 @@ export async function initializeDatabase(): Promise<void> {
       email TEXT UNIQUE NOT NULL,
       full_name TEXT,
       password_hash TEXT NOT NULL,
-      role TEXT NOT NULL CHECK (role IN ('owner', 'staff')),
+      role TEXT NOT NULL CHECK (role IN ('owner', 'staff', 'accountant')),
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+  `);
+
+  // Safely broaden role CHECK on existing installations (idempotent).
+  await db.query(`
+    DO $$
+    DECLARE
+      conname TEXT;
+    BEGIN
+      SELECT con.conname
+      INTO conname
+      FROM pg_constraint con
+      JOIN pg_class cls ON cls.oid = con.conrelid
+      WHERE cls.relname = 'app_users'
+        AND con.contype = 'c'
+        AND pg_get_constraintdef(con.oid) ILIKE '%role%'
+        AND pg_get_constraintdef(con.oid) NOT ILIKE '%accountant%'
+      LIMIT 1;
+
+      IF conname IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE app_users DROP CONSTRAINT %I', conname);
+        ALTER TABLE app_users
+          ADD CONSTRAINT app_users_role_check
+          CHECK (role IN ('owner','staff','accountant'));
+      END IF;
+    END $$;
   `);
 
   await db.query(`

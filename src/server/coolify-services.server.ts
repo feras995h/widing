@@ -2,15 +2,9 @@ import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { getRequest } from "@tanstack/react-start/server";
 import { db, initializeDatabase } from "@/server/db.server";
+import type { CoolifyAuthUser, CoolifyRole } from "@/lib/auth-types";
 
-export type CoolifyRole = "owner" | "staff";
-
-export interface CoolifyAuthUser {
-  id: string;
-  email: string;
-  fullName: string | null;
-  role: CoolifyRole;
-}
+export type { CoolifyAuthUser, CoolifyRole };
 
 function toNumber(value: unknown): number {
   if (typeof value === "number") return value;
@@ -62,6 +56,12 @@ export async function requireAuthUser(): Promise<CoolifyAuthUser> {
 export async function requireOwnerUser(): Promise<CoolifyAuthUser> {
   const user = await requireAuthUser();
   if (user.role !== "owner") throw new Error("Unauthorized");
+  return user;
+}
+
+export async function requireRole(roles: CoolifyRole[]): Promise<CoolifyAuthUser> {
+  const user = await requireAuthUser();
+  if (!roles.includes(user.role)) throw new Error("Unauthorized");
   return user;
 }
 
@@ -717,7 +717,19 @@ export async function createBooking(input: {
     };
 
     const newRange = buildBookingRange(input.eventDate, cleanStart, cleanEnd);
-    const hasConflict = existingRes.rows.some((row: Record<string, unknown>) => {
+
+    // Rule 1: only one active booking per primary day.
+    const sameDayConflict = existingRes.rows.some((row: Record<string, unknown>) => {
+      const existingDate = toYmd(row.event_date);
+      return existingDate === input.eventDate;
+    });
+    if (sameDayConflict) {
+      throw new Error("يوجد حجز آخر في نفس اليوم. لا يُسمح بأكثر من حجز واحد في اليوم.");
+    }
+
+    // Rule 2: new range must not overlap with any existing booking's range
+    // (covers spillover from the previous day).
+    const rangeConflict = existingRes.rows.some((row: Record<string, unknown>) => {
       const existingDate = toYmd(row.event_date);
       if (!existingDate) return false;
       const existingStart = (row.event_start_time as string | null)?.trim() || null;
@@ -725,9 +737,10 @@ export async function createBooking(input: {
       const existingRange = buildBookingRange(existingDate, existingStart, existingEnd, false);
       return overlaps(newRange, existingRange);
     });
-
-    if (hasConflict) {
-      throw new Error("يوجد حجز آخر في نفس التاريخ والوقت. الرجاء اختيار وقت مختلف.");
+    if (rangeConflict) {
+      throw new Error(
+        "وقت الحجز يتعارض مع امتداد حجز سابق. الرجاء اختيار وقت بعد انتهاء الحجز السابق.",
+      );
     }
 
     let customerId = input.customerId ?? "";
@@ -848,7 +861,7 @@ export async function cancelBooking(input: { bookingId: string }) {
 
 export async function getReportsData() {
   await initializeDatabase();
-  await requireOwnerUser();
+  await requireRole(["owner", "accountant"]);
 
   const [bookingsRes, paymentsRes, expensesRes, workerPaymentsRes] = await Promise.all([
     db.query(`

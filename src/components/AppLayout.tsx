@@ -8,20 +8,29 @@ import { Card } from "@/components/ui/card";
 import { clearSessionToken, sessionHeaders } from "@/lib/client-session";
 import type { CoolifyRole } from "@/lib/auth-types";
 
-const navItems = [
-  { to: "/dashboard", label: "الحجوزات", icon: Calendar },
-  { to: "/customers", label: "العملاء", icon: Users, ownerOnly: true },
-  { to: "/expenses", label: "المصروفات", icon: Wallet, ownerOnly: true },
-  { to: "/reports", label: "التقارير", icon: BarChart3, ownerOnly: true },
-  { to: "/access", label: "الصلاحيات", icon: ShieldCheck, ownerOnly: true },
+type NavItem = {
+  to: string;
+  label: string;
+  icon: typeof Calendar;
+  roles: CoolifyRole[];
+};
+
+const navItems: NavItem[] = [
+  { to: "/dashboard", label: "الحجوزات", icon: Calendar, roles: ["owner", "staff"] },
+  { to: "/customers", label: "العملاء", icon: Users, roles: ["owner"] },
+  { to: "/expenses", label: "المصروفات", icon: Wallet, roles: ["owner"] },
+  { to: "/reports", label: "التقارير", icon: BarChart3, roles: ["owner", "accountant"] },
+  { to: "/access", label: "الصلاحيات", icon: ShieldCheck, roles: ["owner"] },
 ];
 
 export function AppLayout({
   children,
   requireOwner = false,
+  allowedRoles,
 }: {
   children: ReactNode;
   requireOwner?: boolean;
+  allowedRoles?: CoolifyRole[];
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,12 +62,29 @@ export function AppLayout({
     }
   }, [loading, isAuthenticated, navigate]);
 
+  // Auto-redirect accountants to /reports when they hit a route they can't access.
+  useEffect(() => {
+    if (loading || !role) return;
+    if (role !== "accountant") return;
+    const isAllowedHere =
+      (allowedRoles && allowedRoles.includes("accountant")) ||
+      location.pathname.startsWith("/reports");
+    if (!isAllowedHere) {
+      navigate({ to: "/reports", replace: true });
+    }
+  }, [loading, role, allowedRoles, location.pathname, navigate]);
+
   const visibleItems = useMemo(
-    () => navItems.filter((item) => !item.ownerOnly || role === "owner"),
+    () => (role ? navItems.filter((item) => item.roles.includes(role)) : []),
     [role],
   );
 
-  const roleLabel = role === "owner" ? "مدير النظام" : "موظف حجوزات";
+  const roleLabel =
+    role === "owner"
+      ? "مدير النظام"
+      : role === "accountant"
+        ? "محاسب"
+        : "موظف حجوزات";
 
   async function handleLogout() {
     try {
@@ -97,7 +123,11 @@ export function AppLayout({
     );
   }
 
-  if (requireOwner && role !== "owner") {
+  const accessDenied =
+    (requireOwner && role !== "owner") ||
+    (allowedRoles && !allowedRoles.includes(role));
+
+  if (accessDenied) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <header className="bg-card border-b border-border shadow-elegant sticky top-0 z-40">
@@ -117,7 +147,7 @@ export function AppLayout({
         <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
           <Card className="p-8 text-center">
             <h2 className="text-xl font-bold mb-2">غير مصرح بالوصول</h2>
-            <p className="text-muted-foreground">هذا القسم متاح لمدير النظام فقط.</p>
+            <p className="text-muted-foreground">هذا القسم غير متاح لصلاحيتك الحالية.</p>
           </Card>
         </main>
       </div>

@@ -1,5 +1,5 @@
 /** Types only — no server imports, safe for all entry points (avoids Vite SSR circular init). */
-export type CoolifyRole = "owner" | "staff";
+export type CoolifyRole = "owner" | "staff" | "accountant";
 
 export interface CoolifyAuthUser {
   id: string;

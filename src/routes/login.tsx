@@ -29,7 +29,10 @@ function LoginPage() {
       try {
         const { getCurrentAuthUserFn } = await import("@/lib/coolify-auth");
         const res = await getCurrentAuthUserFn({ headers: sessionHeaders() });
-        if (res.user) navigate({ to: "/dashboard", replace: true });
+        if (res.user) {
+          const target = res.user.role === "accountant" ? "/reports" : "/dashboard";
+          navigate({ to: target, replace: true });
+        }
       } catch {
         /* تجاهل: يبقى المستخدم على /login (مثلاً إن فشل الاتصال بقاعدة البيانات) */
       }
@@ -60,7 +63,8 @@ function LoginPage() {
       });
       setSessionToken(res.token);
       toast.success("تم تسجيل الدخول بنجاح");
-      navigate({ to: "/dashboard", replace: true });
+      const target = res.user?.role === "accountant" ? "/reports" : "/dashboard";
+      navigate({ to: target, replace: true });
     } catch (err) {
       const description = err instanceof Error ? err.message : "Invalid login credentials";
       toast.error("فشل تسجيل الدخول", { description });

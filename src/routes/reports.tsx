@@ -37,7 +37,7 @@ import { sessionHeaders } from "@/lib/client-session";
 
 export const Route = createFileRoute("/reports")({
   component: () => (
-    <AppLayout requireOwner>
+    <AppLayout allowedRoles={["owner", "accountant"]}>
       <ReportsPage />
     </AppLayout>
   ),

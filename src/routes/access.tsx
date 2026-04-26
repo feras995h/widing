@@ -45,6 +45,7 @@ interface MergedUser {
 const roleLabels: Record<CoolifyRole, string> = {
   owner: "مدير النظام",
   staff: "موظف حجوزات",
+  accountant: "محاسب",
 };
 
 function AccessManagementPage() {
@@ -292,6 +293,7 @@ function AccessManagementPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="staff">موظف حجوزات</SelectItem>
+              <SelectItem value="accountant">محاسب</SelectItem>
               <SelectItem value="owner">مدير النظام</SelectItem>
             </SelectContent>
           </Select>
@@ -358,6 +360,7 @@ function AccessManagementPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="staff">موظف حجوزات</SelectItem>
+                            <SelectItem value="accountant">محاسب</SelectItem>
                             <SelectItem value="owner">مدير النظام</SelectItem>
                           </SelectContent>
                         </Select>
