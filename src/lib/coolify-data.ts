@@ -50,6 +50,27 @@ export const cancelBookingFn: any = createServerFn({ method: "POST" }).handler(
   },
 );
 
+export const updateBookingFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.updateBooking(data);
+  },
+);
+
+export const deleteCustomerFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.deleteCustomer(data);
+  },
+);
+
+export const deleteWorkerFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.deleteWorker(data);
+  },
+);
+
 export const getReportsDataFn = createServerFn({ method: "GET" }).handler(async () => {
   const services = await import("@/server/coolify-services.server");
   return services.getReportsData();

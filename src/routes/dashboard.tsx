@@ -86,6 +86,7 @@ function DashboardPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [bookingOpen, setBookingOpen] = useState(false);
+  const [editingBooking, setEditingBooking] = useState<Booking | null>(null);
   const [defaultDate, setDefaultDate] = useState<string | undefined>();
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -589,13 +590,26 @@ function DashboardPage() {
                       </Button>
                     )}
                     {selectedBooking.status !== "cancelled" && (
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleCancelBooking(selectedBooking)}
-                        className="w-full"
-                      >
-                        إلغاء الحجز (أرشفة)
-                      </Button>
+                      <>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setEditingBooking(selectedBooking);
+                            setSelectedBooking(null);
+                            setBookingOpen(true);
+                          }}
+                          className="w-full"
+                        >
+                          تعديل الحجز
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          onClick={() => handleCancelBooking(selectedBooking)}
+                          className="w-full"
+                        >
+                          إلغاء الحجز (أرشفة)
+                        </Button>
+                      </>
                     )}
                     <Button
                       variant="outline"

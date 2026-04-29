@@ -6,9 +6,10 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Phone, Calendar as CalIcon, User, FileText, ChevronLeft } from "lucide-react";
+import { Search, Phone, Calendar as CalIcon, User, FileText, ChevronLeft, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { formatLYD } from "@/lib/format";
-import { getCustomersReportFn } from "@/lib/coolify-data";
+import { deleteCustomerFn, getCustomersReportFn } from "@/lib/coolify-data";
 import { sessionHeaders } from "@/lib/client-session";
 
 export const Route = createFileRoute("/customers")({
@@ -52,6 +53,28 @@ function CustomersPage() {
   const filtered = customers.filter(
     (c) => c.full_name.toLowerCase().includes(search.toLowerCase()) || c.phone.includes(search),
   );
+
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  async function handleDeleteCustomer(c: CustomerRow) {
+    const message =
+      c.bookings.length > 0
+        ? `سيتم حذف العميل ${c.full_name} و ${c.bookings.length} حجز/حجوزات وجميع المدفوعات المرتبطة بها نهائيًا. لا يمكن التراجع. هل تريد المتابعة؟`
+        : `هل تريد حذف العميل ${c.full_name}؟ لا يمكن التراجع.`;
+    const ok = window.confirm(message);
+    if (!ok) return;
+    setDeletingId(c.id);
+    try {
+      await deleteCustomerFn({ headers: sessionHeaders(), data: { customerId: c.id } });
+      setCustomers((prev) => prev.filter((x) => x.id !== c.id));
+      toast.success("تم حذف العميل");
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "تعذر حذف العميل";
+      toast.error("فشل الحذف", { description });
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -121,17 +144,28 @@ function CustomersPage() {
                     <p className="font-bold text-success">{formatLYD(paid)}</p>
                   </div>
                 </div>
-                <Button variant="secondary" className="w-full mt-3" asChild>
-                  <Link
-                    to="/customers/$customerId"
-                    params={{ customerId: c.id }}
-                    className="inline-flex items-center justify-center gap-1"
+                <div className="grid grid-cols-[1fr_auto] gap-2 mt-3">
+                  <Button variant="secondary" className="w-full" asChild>
+                    <Link
+                      to="/customers/$customerId"
+                      params={{ customerId: c.id }}
+                      className="inline-flex items-center justify-center gap-1"
+                    >
+                      <FileText className="w-4 h-4" />
+                      ملف العميل
+                      <ChevronLeft className="w-3.5 h-3.5 opacity-60" />
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    title="حذف العميل"
+                    disabled={deletingId === c.id}
+                    onClick={() => handleDeleteCustomer(c)}
                   >
-                    <FileText className="w-4 h-4" />
-                    ملف العميل
-                    <ChevronLeft className="w-3.5 h-3.5 opacity-60" />
-                  </Link>
-                </Button>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </Card>
             );
           })}

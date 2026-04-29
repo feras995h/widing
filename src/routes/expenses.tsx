@@ -42,6 +42,7 @@ import {
   addWorkerFn,
   addWorkerPaymentFn,
   deleteExpenseFn,
+  deleteWorkerFn,
   getExpensesDataFn,
   toggleWorkerActiveFn,
 } from "@/lib/coolify-data";
@@ -335,7 +336,22 @@ function WorkersSection() {
     });
     await load();
   }
+  async function handleDeleteWorker(w: Worker) {
+    const ok = window.confirm(
+      `سيتم حذف العامل ${w.full_name} وجميع مدفوعات الرواتب المرتبطة به نهائيًا. لا يمكن التراجع. هل تريد المتابعة؟`,
+    );
+    if (!ok) return;
+    try {
+      await deleteWorkerFn({ headers: sessionHeaders(), data: { workerId: w.id } });
+      toast.success("تم حذف العامل");
+      await load();
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "تعذر حذف العامل";
+      toast.error("فشل الحذف", { description });
+    }
+  }
 
+  
   const totalSalaries = workers
     .filter((w) => w.is_active)
     .reduce((s, w) => s + Number(w.monthly_salary), 0);
@@ -436,7 +452,7 @@ function WorkersSection() {
                   <p className="text-xs text-muted-foreground">الراتب الشهري</p>
                   <p className="font-bold text-primary">{formatLYD(w.monthly_salary)}</p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-stretch">
                   <Button size="sm" variant="secondary" asChild className="flex-1">
                     <Link
                       to="/workers/$workerId"
@@ -458,6 +474,16 @@ function WorkersSection() {
                     }}
                   >
                     <Plus className="w-3.5 h-3.5 ml-1" /> دفع راتب
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    title="حذف العامل"
+                    aria-label="حذف العامل"
+                    className="sm:w-9 sm:px-0 shrink-0"
+                    onClick={() => handleDeleteWorker(w)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </div>
               </div>

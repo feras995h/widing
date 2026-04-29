@@ -64,3 +64,10 @@ export const resetUserPasswordByOwnerFn: any = createServerFn({ method: "POST" }
     return services.resetUserPasswordByOwner(data);
   },
 );
+
+export const deleteUserByOwnerFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.deleteUserByOwner(data);
+  },
+);

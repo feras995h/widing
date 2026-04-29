@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Search, ShieldCheck } from "lucide-react";
+import { Search, ShieldCheck, Trash2 } from "lucide-react";
 import type { CoolifyRole } from "@/lib/auth-types";
 import { sessionHeaders } from "@/lib/client-session";
 
@@ -53,6 +53,7 @@ function AccessManagementPage() {
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
   const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [users, setUsers] = useState<MergedUser[]>([]);
   const [draftRoles, setDraftRoles] = useState<Record<string, CoolifyRole>>({});
@@ -209,6 +210,32 @@ function AccessManagementPage() {
     }
   }
 
+  async function handleDeleteUser(user: MergedUser) {
+    if (currentUserId === user.id) {
+      toast.error("لا يمكن حذف حسابك الحالي");
+      return;
+    }
+    const ok = window.confirm(
+      `هل تريد حذف المستخدم ${user.fullName} نهائيًا؟ لا يمكن التراجع.`,
+    );
+    if (!ok) return;
+    setDeletingUserId(user.id);
+    try {
+      const { deleteUserByOwnerFn } = await import("@/lib/coolify-auth");
+      await deleteUserByOwnerFn({
+        headers: sessionHeaders(),
+        data: { userId: user.id },
+      });
+      setUsers((prev) => prev.filter((u) => u.id !== user.id));
+      toast.success("تم حذف المستخدم");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "تعذر حذف المستخدم";
+      toast.error("فشل الحذف", { description: message });
+    } finally {
+      setDeletingUserId(null);
+    }
+  }
+
   async function resetUserPassword(user: MergedUser) {
     const newPassword = (draftPasswords[user.id] || "").trim();
     if (newPassword.length < 6) {
@@ -323,6 +350,7 @@ function AccessManagementPage() {
                   <TableHead className="text-right">الصلاحية</TableHead>
                   <TableHead className="text-right">الحساب</TableHead>
                   <TableHead className="text-right">إعادة تعيين كلمة المرور</TableHead>
+                  <TableHead className="text-right">حذف</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -415,6 +443,21 @@ function AccessManagementPage() {
                             {resettingUserId === u.id ? "جارٍ التحديث..." : "إعادة التعيين"}
                           </Button>
                         </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          title="حذف المستخدم"
+                          onClick={() => void handleDeleteUser(u)}
+                          disabled={deletingUserId === u.id || currentUserId === u.id}
+                        >
+                          {deletingUserId === u.id ? (
+                            "جارٍ الحذف..."
+                          ) : (
+                            <Trash2 className="w-4 h-4" />
+                          )}
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );

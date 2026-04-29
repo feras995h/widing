@@ -859,6 +859,143 @@ export async function cancelBooking(input: { bookingId: string }) {
   return { ok: true };
 }
 
+export async function updateBooking(input: {
+  bookingId: string;
+  eventDate: string;
+  eventType: string;
+  guestsCount: number | null;
+  totalPrice: number;
+  customerPhone2: string | null;
+  customerIdentityNumber: string | null;
+  eventStartTime: string | null;
+  eventEndTime: string | null;
+  notes: string | null;
+  services: { hall: boolean; catering: boolean; decor: boolean; photography: boolean };
+}) {
+  await initializeDatabase();
+  await requireAuthUser();
+
+  const cleanStart = input.eventStartTime?.trim() || null;
+  const cleanEnd = input.eventEndTime?.trim() || null;
+
+  if ((cleanStart && !cleanEnd) || (!cleanStart && cleanEnd)) {
+    throw new Error("يجب إدخال وقت البداية والنهاية معًا");
+  }
+
+  // Note: per-day uniqueness and range overlap (against OTHER bookings) are enforced
+  // at the database level by the trigger (which already excludes b.id <> NEW.id).
+  const result = await db.query(
+    `
+      UPDATE bookings
+      SET event_date = $2,
+          event_type = $3,
+          guests_count = $4,
+          total_price = $5,
+          includes_hall = $6,
+          includes_catering = $7,
+          includes_decor = $8,
+          includes_photography = $9,
+          customer_phone2 = $10,
+          customer_identity_number = $11,
+          event_start_time = $12,
+          event_end_time = $13,
+          notes = $14
+      WHERE id = $1
+      RETURNING id
+    `,
+    [
+      input.bookingId,
+      input.eventDate,
+      input.eventType,
+      input.guestsCount,
+      input.totalPrice,
+      input.services.hall,
+      input.services.catering,
+      input.services.decor,
+      input.services.photography,
+      input.customerPhone2,
+      input.customerIdentityNumber,
+      cleanStart,
+      cleanEnd,
+      input.notes,
+    ],
+  );
+
+  if (!result.rows[0]) {
+    throw new Error("الحجز غير موجود");
+  }
+
+  return { id: result.rows[0].id as string };
+}
+
+export async function deleteCustomer(input: { customerId: string }) {
+  await initializeDatabase();
+  await requireOwnerUser();
+
+  const client = await db.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM bookings WHERE customer_id = $1`, [input.customerId]);
+    const result = await client.query(
+      `DELETE FROM customers WHERE id = $1 RETURNING id`,
+      [input.customerId],
+    );
+    if (!result.rows[0]) {
+      await client.query("ROLLBACK");
+      throw new Error("العميل غير موجود");
+    }
+    await client.query("COMMIT");
+    return { ok: true };
+  } catch (err) {
+    try { await client.query("ROLLBACK"); } catch {}
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteWorker(input: { workerId: string }) {
+  await initializeDatabase();
+  await requireOwnerUser();
+
+  const result = await db.query(
+    `DELETE FROM workers WHERE id = $1 RETURNING id`,
+    [input.workerId],
+  );
+  if (!result.rows[0]) throw new Error("الموظف غير موجود");
+  return { ok: true };
+}
+
+export async function deleteUserByOwner(input: { userId: string }) {
+  await initializeDatabase();
+  const current = await requireOwnerUser();
+
+  if (current.id === input.userId) {
+    throw new Error("لا يمكن حذف حسابك الحالي");
+  }
+
+  const targetRes = await db.query(
+    `SELECT id, role, is_active FROM app_users WHERE id = $1 LIMIT 1`,
+    [input.userId],
+  );
+  const target = targetRes.rows[0] as { id: string; role: CoolifyRole; is_active: boolean } | undefined;
+  if (!target) throw new Error("المستخدم غير موجود");
+
+  if (target.role === "owner") {
+    const ownersRes = await db.query(
+      `SELECT COUNT(*)::int AS count FROM app_users WHERE role = 'owner' AND is_active = TRUE AND id <> $1`,
+      [input.userId],
+    );
+    const activeOwnersLeft = Number((ownersRes.rows[0] as { count: number }).count ?? 0);
+    if (activeOwnersLeft === 0) {
+      throw new Error("لا يمكن حذف آخر مالك نشط في النظام");
+    }
+  }
+
+  await db.query(`DELETE FROM app_users WHERE id = $1`, [input.userId]);
+  return { ok: true };
+}
+
 export async function getReportsData() {
   await initializeDatabase();
   await requireRole(["owner", "accountant"]);
