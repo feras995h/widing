@@ -842,13 +842,9 @@ export async function cancelBooking(input: { bookingId: string }) {
   await initializeDatabase();
   await requireAuthUser();
 
+  // Permanent deletion: associated payments are removed via ON DELETE CASCADE.
   const result = await db.query(
-    `
-      UPDATE bookings
-      SET status = 'cancelled'
-      WHERE id = $1
-      RETURNING id
-    `,
+    `DELETE FROM bookings WHERE id = $1 RETURNING id`,
     [input.bookingId],
   );
 

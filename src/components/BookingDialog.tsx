@@ -32,9 +32,22 @@ interface Customer {
   phone: string;
 }
 
+function toYmd(value: unknown): string {
+  if (!value) return "";
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return "";
+    const y = value.getFullYear();
+    const m = String(value.getMonth() + 1).padStart(2, "0");
+    const d = String(value.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+  if (typeof value === "string") return value.slice(0, 10);
+  return "";
+}
+
 export interface EditingBooking {
   id: string;
-  event_date: string;
+  event_date: string | Date;
   event_type: string;
   guests_count: number | null;
   total_price: number;
@@ -93,7 +106,7 @@ export function BookingDialog({
       setMode("existing");
       setTotalPrice(String(editingBooking.total_price ?? ""));
       setPaidAmount("");
-      setEventDate(editingBooking.event_date?.slice(0, 10) ?? "");
+      setEventDate(toYmd(editingBooking.event_date));
       setEventType(editingBooking.event_type ?? "wedding");
       setGuestsCount(
         editingBooking.guests_count != null ? String(editingBooking.guests_count) : "",

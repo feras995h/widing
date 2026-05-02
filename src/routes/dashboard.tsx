@@ -504,8 +504,12 @@ function DashboardPage() {
 
       <BookingDialog
         open={bookingOpen}
-        onOpenChange={setBookingOpen}
+        onOpenChange={(o) => {
+          setBookingOpen(o);
+          if (!o) setEditingBooking(null);
+        }}
         defaultDate={defaultDate}
+        editingBooking={editingBooking}
         onSaved={loadBookings}
       />
 
@@ -607,7 +611,7 @@ function DashboardPage() {
                           onClick={() => handleCancelBooking(selectedBooking)}
                           className="w-full"
                         >
-                          إلغاء الحجز (أرشفة)
+                          حذف الحجز
                         </Button>
                       </>
                     )}
