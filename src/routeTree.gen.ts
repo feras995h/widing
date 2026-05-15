@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TreasuryRouteImport } from './routes/treasury'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ExpensesRouteImport } from './routes/expenses'
@@ -19,6 +20,11 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as WorkersWorkerIdRouteImport } from './routes/workers.$workerId'
 import { Route as CustomersCustomerIdRouteImport } from './routes/customers_.$customerId'
 
+const TreasuryRoute = TreasuryRouteImport.update({
+  id: '/treasury',
+  path: '/treasury',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/expenses': typeof ExpensesRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
+  '/treasury': typeof TreasuryRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/workers/$workerId': typeof WorkersWorkerIdRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/expenses': typeof ExpensesRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
+  '/treasury': typeof TreasuryRoute
   '/customers/$customerId': typeof CustomersCustomerIdRoute
   '/workers/$workerId': typeof WorkersWorkerIdRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/expenses': typeof ExpensesRoute
   '/login': typeof LoginRoute
   '/reports': typeof ReportsRoute
+  '/treasury': typeof TreasuryRoute
   '/customers_/$customerId': typeof CustomersCustomerIdRoute
   '/workers/$workerId': typeof WorkersWorkerIdRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/expenses'
     | '/login'
     | '/reports'
+    | '/treasury'
     | '/customers/$customerId'
     | '/workers/$workerId'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/expenses'
     | '/login'
     | '/reports'
+    | '/treasury'
     | '/customers/$customerId'
     | '/workers/$workerId'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/expenses'
     | '/login'
     | '/reports'
+    | '/treasury'
     | '/customers_/$customerId'
     | '/workers/$workerId'
   fileRoutesById: FileRoutesById
@@ -143,12 +155,20 @@ export interface RootRouteChildren {
   ExpensesRoute: typeof ExpensesRoute
   LoginRoute: typeof LoginRoute
   ReportsRoute: typeof ReportsRoute
+  TreasuryRoute: typeof TreasuryRoute
   CustomersCustomerIdRoute: typeof CustomersCustomerIdRoute
   WorkersWorkerIdRoute: typeof WorkersWorkerIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/treasury': {
+      id: '/treasury'
+      path: '/treasury'
+      fullPath: '/treasury'
+      preLoaderRoute: typeof TreasuryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reports': {
       id: '/reports'
       path: '/reports'
@@ -223,6 +243,7 @@ const rootRouteChildren: RootRouteChildren = {
   ExpensesRoute: ExpensesRoute,
   LoginRoute: LoginRoute,
   ReportsRoute: ReportsRoute,
+  TreasuryRoute: TreasuryRoute,
   CustomersCustomerIdRoute: CustomersCustomerIdRoute,
   WorkersWorkerIdRoute: WorkersWorkerIdRoute,
 }
