@@ -230,6 +230,16 @@ function TreasuryPage() {
     };
   }, [filteredReceipts, filteredGeneralExpenses, filteredWorkerPayments]);
 
+  // صافي الخزينة الكلي — لا يتأثر بفلتر الشهر/السنة (رصيد لحظي للنقدية)
+  const treasuryBalance = useMemo(() => {
+    const receipts = payments
+      .filter((p) => activeBookingIds.has(String(p.booking_id)))
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const generalExp = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+    const salaries = workerPayments.reduce((s, w) => s + Number(w.amount || 0), 0);
+    return receipts - generalExp - salaries;
+  }, [payments, expenses, workerPayments, activeBookingIds]);
+
   type DebtorRow = {
     bookingId: string;
     customerId: string;
@@ -376,7 +386,7 @@ function TreasuryPage() {
   <div class="kpis">
     <div class="kpi"><div class="label">إجمالي المقبوضات</div><div class="value pos">${esc(formatLYD(totals.receipts))}</div></div>
     <div class="kpi"><div class="label">إجمالي المصروفات</div><div class="value neg">${esc(formatLYD(totals.disbursements))}</div></div>
-    <div class="kpi"><div class="label">صافي الخزينة</div><div class="value">${esc(formatLYD(totals.net))}</div></div>
+    <div class="kpi"><div class="label">صافي الخزينة (رصيد كلي)</div><div class="value">${esc(formatLYD(treasuryBalance))}</div><div class="label">صافي الفترة: ${esc(formatLYD(totals.net))}</div></div>
     <div class="kpi"><div class="label">إجمالي المديونيات</div><div class="value neg">${esc(formatLYD(debtorsTotals.totalDue))}</div></div>
   </div>
 
@@ -504,8 +514,9 @@ function TreasuryPage() {
         <KpiCard
           icon={Wallet}
           label="صافي الخزينة"
-          value={formatLYD(totals.net)}
-          tone={totals.net >= 0 ? "primary" : "destructive"}
+          value={formatLYD(treasuryBalance)}
+          tone={treasuryBalance >= 0 ? "primary" : "destructive"}
+          hint={`صافي الفترة: ${formatLYD(totals.net)}`}
         />
         <KpiCard
           icon={UsersIcon}

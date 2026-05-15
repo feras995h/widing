@@ -155,8 +155,13 @@ function ReportsPage() {
     return monthsArr;
   }, [expenses, workerPayments, year]);
 
+  const visibleMonthlyBreakdown = useMemo(
+    () => (month === "all" ? monthlyBreakdown : monthlyBreakdown.filter((m) => m.monthIndex === month)),
+    [monthlyBreakdown, month],
+  );
+
   const yearTotals = useMemo(() => {
-    return monthlyBreakdown.reduce(
+    return visibleMonthlyBreakdown.reduce(
       (acc, m) => ({
         generalExpenses: acc.generalExpenses + m.generalExpenses,
         workerPayments: acc.workerPayments + m.workerPayments,
@@ -164,7 +169,7 @@ function ReportsPage() {
       }),
       { generalExpenses: 0, workerPayments: 0, total: 0 },
     );
-  }, [monthlyBreakdown]);
+  }, [visibleMonthlyBreakdown]);
 
   // Detailed expenses for the selected year (for the PDF detail tables)
   const yearExpensesDetail = useMemo(
@@ -525,8 +530,7 @@ function ReportsPage() {
           <Card className="p-4 sm:p-6">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <h3 className="font-bold flex items-center gap-2">
-                <CalendarRange className="w-5 h-5" /> ملخص شهري — سنة{" "}
-                <LatinDigits>{year}</LatinDigits>
+                <CalendarRange className="w-5 h-5" /> ملخص شهري — {month === "all" ? (<>سنة <LatinDigits>{year}</LatinDigits></>) : (<>{months[month as number]} <LatinDigits>{year}</LatinDigits></>)}
               </h3>
               <p className="text-xs text-muted-foreground">
                 يتحدّث تلقائياً مع كل مصروف أو راتب جديد
@@ -543,7 +547,7 @@ function ReportsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {monthlyBreakdown.map((m) => (
+                  {visibleMonthlyBreakdown.map((m) => (
                     <tr key={m.monthIndex} className="border-b border-border hover:bg-secondary/40">
                       <td className="p-3 font-medium">{m.monthLabel}</td>
                       <td className="p-3">
@@ -572,7 +576,7 @@ function ReportsPage() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-gradient-gold text-gold-foreground font-bold">
-                    <td className="p-3">إجمالي السنة</td>
+                    <td className="p-3">{month === "all" ? "إجمالي السنة" : "إجمالي الشهر"}</td>
                     <td className="p-3">{formatLYD(yearTotals.generalExpenses)}</td>
                     <td className="p-3">{formatLYD(yearTotals.workerPayments)}</td>
                     <td className="p-3">{formatLYD(yearTotals.total)}</td>
