@@ -838,6 +838,46 @@ export async function createPayment(input: {
   return { ok: true };
 }
 
+export async function updatePayment(input: {
+  paymentId: string;
+  amount: number;
+  paymentDate: string;
+  method: "cash" | "bank_transfer" | "card" | "other";
+  notes: string | null;
+}) {
+  await initializeDatabase();
+  await requireAuthUser();
+  if (!(input.amount > 0)) {
+    throw new Error("المبلغ يجب أن يكون أكبر من صفر");
+  }
+  const result = await db.query(
+    `
+      UPDATE payments
+      SET amount = $1, payment_date = $2, method = $3, notes = $4
+      WHERE id = $5
+      RETURNING id
+    `,
+    [input.amount, input.paymentDate, input.method, input.notes, input.paymentId],
+  );
+  if (!result.rows[0]) {
+    throw new Error("الدفعة غير موجودة");
+  }
+  return { ok: true };
+}
+
+export async function deletePayment(input: { paymentId: string }) {
+  await initializeDatabase();
+  await requireAuthUser();
+  const result = await db.query(
+    `DELETE FROM payments WHERE id = $1 RETURNING id`,
+    [input.paymentId],
+  );
+  if (!result.rows[0]) {
+    throw new Error("الدفعة غير موجودة");
+  }
+  return { ok: true };
+}
+
 export async function cancelBooking(input: { bookingId: string }) {
   await initializeDatabase();
   await requireAuthUser();

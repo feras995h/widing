@@ -5,7 +5,8 @@ import { LatinDigits } from "@/components/LatinDigits";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, Phone, User, Calendar, ChevronLeft } from "lucide-react";
+import { ArrowRight, Phone, User, Calendar, ChevronLeft, Pencil } from "lucide-react";
+import { PaymentEditDialog, type EditablePayment } from "@/components/PaymentEditDialog";
 import {
   formatLYD,
   formatShortDate,
@@ -60,9 +61,11 @@ function CustomerDetailPage() {
     notes: string | null;
   } | null>(null);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [editingPayment, setEditingPayment] = useState<EditablePayment | null>(null);
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    getCustomerDetailFn({ headers: sessionHeaders(), data: { customerId } })
+  function loadDetail() {
+    return getCustomerDetailFn({ headers: sessionHeaders(), data: { customerId } })
       .then((res: any) => {
         const cu = res.customer as {
           id: string;
@@ -80,7 +83,24 @@ function CustomerDetailPage() {
         });
         setLoading(false);
       });
+  }
+
+  useEffect(() => {
+    loadDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerId]);
+
+  const editingBooking = useMemo(
+    () => bookings.find((b) => b.id === editingBookingId) ?? null,
+    [bookings, editingBookingId],
+  );
+  const editMaxAllowed = useMemo(() => {
+    if (!editingBooking || !editingPayment) return 0;
+    const otherPaid = editingBooking.payments
+      .filter((p) => p.id !== editingPayment.id)
+      .reduce((s, p) => s + Number(p.amount), 0);
+    return Math.max(0, Number(editingBooking.total_price) - otherPaid);
+  }, [editingBooking, editingPayment]);
 
   const totals = useMemo(() => {
     const totalValue = bookings.reduce((s, b) => s + Number(b.total_price), 0);
@@ -211,14 +231,37 @@ function CustomerDetailPage() {
                       {b.payments.map((p) => (
                         <div
                           key={p.id}
-                          className="flex flex-wrap justify-between gap-2 text-sm p-2 rounded-md bg-success/5 border border-success/10"
+                          className="flex flex-wrap items-center justify-between gap-2 text-sm p-2 rounded-md bg-success/5 border border-success/10"
                         >
                           <span className="text-muted-foreground">
                             {formatShortDate(p.payment_date)} ·{" "}
                             {paymentMethodLabels[p.method] ?? p.method}
                             {p.notes && ` · ${p.notes}`}
                           </span>
-                          <span className="font-bold text-success dir-ltr">{formatLYD(p.amount)}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-success dir-ltr">
+                              {formatLYD(p.amount)}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              title="تعديل الدفعة"
+                              onClick={() => {
+                                setEditingBookingId(b.id);
+                                setEditingPayment({
+                                  id: p.id,
+                                  amount: Number(p.amount),
+                                  payment_date: p.payment_date,
+                                  method: p.method,
+                                  notes: p.notes,
+                                });
+                              }}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -244,6 +287,23 @@ function CustomerDetailPage() {
           </Link>
         </Button>
       </div>
+
+      <PaymentEditDialog
+        open={!!editingPayment}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditingPayment(null);
+            setEditingBookingId(null);
+          }
+        }}
+        payment={editingPayment}
+        maxAllowed={editMaxAllowed}
+        onSaved={() => {
+          setEditingPayment(null);
+          setEditingBookingId(null);
+          loadDetail();
+        }}
+      />
     </div>
   );
 }
