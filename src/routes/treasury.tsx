@@ -86,6 +86,14 @@ interface WorkerPaymentRow {
   notes: string | null;
   workers: { full_name: string; job_title: string };
 }
+interface GeneralReceiptRow {
+  id: string;
+  category: string;
+  amount: number;
+  receipt_date: string;
+  description: string;
+  method: "cash" | "bank_transfer";
+}
 
 const ARABIC_MONTHS = [
   "يناير",
@@ -111,6 +119,7 @@ function TreasuryPage() {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [workerPayments, setWorkerPayments] = useState<WorkerPaymentRow[]>([]);
+  const [generalReceipts, setGeneralReceipts] = useState<GeneralReceiptRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [debtorSearch, setDebtorSearch] = useState("");
 
@@ -121,6 +130,7 @@ function TreasuryPage() {
         setPayments(res.payments ?? []);
         setExpenses(res.expenses ?? []);
         setWorkerPayments(res.workerPayments ?? []);
+        setGeneralReceipts(res.generalReceipts ?? []);
       })
       .catch((err: unknown) => {
         const description = err instanceof Error ? err.message : "تعذر تحميل البيانات";
@@ -149,8 +159,9 @@ function TreasuryPage() {
     payments.forEach((p) => push(p.payment_date));
     expenses.forEach((e) => push(e.expense_date));
     workerPayments.forEach((w) => push(w.payment_date));
+    generalReceipts.forEach((r) => push(r.receipt_date));
     return Array.from(set).sort((a, b) => b - a);
-  }, [bookings, payments, expenses, workerPayments]);
+  }, [bookings, payments, expenses, workerPayments, generalReceipts]);
 
   const bookingById = useMemo(() => {
     const map = new Map<string, BookingRow>();
@@ -169,6 +180,54 @@ function TreasuryPage() {
       .filter((p) => inRange(p.payment_date))
       .sort((a, b) => (a.payment_date < b.payment_date ? 1 : -1));
   }, [payments, activeBookingIds, year, month]);
+
+  const filteredGeneralReceipts = useMemo(
+    () =>
+      generalReceipts
+        .filter((r) => inRange(r.receipt_date))
+        .sort((a, b) => (a.receipt_date < b.receipt_date ? 1 : -1)),
+    [generalReceipts, year, month],
+  );
+
+  type ReceiptItem = {
+    id: string;
+    date: string;
+    kind: "booking" | "general";
+    title: string;
+    subtitle: string;
+    method: string;
+    notes: string;
+    amount: number;
+  };
+
+  const receiptItems: ReceiptItem[] = useMemo(() => {
+    const a: ReceiptItem[] = filteredReceipts.map((p) => {
+      const b = bookingById.get(String(p.booking_id));
+      return {
+        id: `p-${p.id}`,
+        date: p.payment_date,
+        kind: "booking",
+        title: b?.customers?.full_name ?? "—",
+        subtitle: b
+          ? `${eventTypeLabels[b.event_type] ?? b.event_type} · ${formatPlainDate(b.event_date)}`
+          : "—",
+        method: p.method,
+        notes: p.notes ?? "",
+        amount: Number(p.amount),
+      };
+    });
+    const b: ReceiptItem[] = filteredGeneralReceipts.map((r) => ({
+      id: `g-${r.id}`,
+      date: r.receipt_date,
+      kind: "general",
+      title: r.category || "قبض عام",
+      subtitle: r.description || "—",
+      method: r.method,
+      notes: "",
+      amount: Number(r.amount),
+    }));
+    return [...a, ...b].sort((x, y) => (x.date < y.date ? 1 : -1));
+  }, [filteredReceipts, filteredGeneralReceipts, bookingById]);
 
   const filteredGeneralExpenses = useMemo(
     () =>
@@ -201,7 +260,7 @@ function TreasuryPage() {
       id: `e-${e.id}`,
       date: e.expense_date,
       kind: "expense",
-      title: expenseCategoryLabels[e.category] ?? e.category,
+      title: expenseCategoryLabels[e.category] ?? e.category ?? "—",
       subtitle: e.description ?? "—",
       amount: Number(e.amount),
       notes: null,
@@ -219,26 +278,33 @@ function TreasuryPage() {
   }, [filteredGeneralExpenses, filteredWorkerPayments]);
 
   const totals = useMemo(() => {
-    const receipts = filteredReceipts.reduce((s, p) => s + Number(p.amount), 0);
+    const receipts = receiptItems.reduce((s, r) => s + Number(r.amount), 0);
+    const receiptsBank = receiptItems
+      .filter((r) => r.method === "bank_transfer")
+      .reduce((s, r) => s + Number(r.amount), 0);
+    const receiptsCash = receipts - receiptsBank;
     const generalExp = filteredGeneralExpenses.reduce((s, e) => s + Number(e.amount), 0);
     const salaries = filteredWorkerPayments.reduce((s, w) => s + Number(w.amount), 0);
     const disbursementsTotal = generalExp + salaries;
     return {
       receipts,
+      receiptsBank,
+      receiptsCash,
       disbursements: disbursementsTotal,
       net: receipts - disbursementsTotal,
     };
-  }, [filteredReceipts, filteredGeneralExpenses, filteredWorkerPayments]);
+  }, [receiptItems, filteredGeneralExpenses, filteredWorkerPayments]);
 
   // صافي الخزينة الكلي — لا يتأثر بفلتر الشهر/السنة (رصيد لحظي للنقدية)
   const treasuryBalance = useMemo(() => {
     const receipts = payments
       .filter((p) => activeBookingIds.has(String(p.booking_id)))
       .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const generalRec = generalReceipts.reduce((s, r) => s + Number(r.amount || 0), 0);
     const generalExp = expenses.reduce((s, e) => s + Number(e.amount || 0), 0);
     const salaries = workerPayments.reduce((s, w) => s + Number(w.amount || 0), 0);
-    return receipts - generalExp - salaries;
-  }, [payments, expenses, workerPayments, activeBookingIds]);
+    return receipts + generalRec - generalExp - salaries;
+  }, [payments, generalReceipts, expenses, workerPayments, activeBookingIds]);
 
   type DebtorRow = {
     bookingId: string;
@@ -306,19 +372,15 @@ function TreasuryPage() {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
 
-    const receiptsRows = filteredReceipts
-      .map((p) => {
-        const b = bookingById.get(String(p.booking_id));
-        const eventInfo = b
-          ? `${eventTypeLabels[b.event_type] ?? b.event_type} · ${formatPlainDate(b.event_date)}`
-          : "—";
+    const receiptsRows = receiptItems
+      .map((r) => {
         return `<tr>
-          <td class="date">${formatPlainDate(p.payment_date)}</td>
-          <td>${esc(b?.customers?.full_name ?? "—")}</td>
-          <td>${esc(eventInfo)}</td>
-          <td>${esc(paymentMethodLabels[p.method] ?? p.method)}</td>
-          <td>${esc(p.notes ?? "—")}</td>
-          <td class="amount pos">${esc(formatLYD(p.amount))}</td>
+          <td class="date">${formatPlainDate(r.date)}</td>
+          <td>${esc(r.title)}</td>
+          <td>${esc(r.subtitle)}</td>
+          <td>${esc(r.method === "bank_transfer" ? "مصرف" : paymentMethodLabels[r.method] ?? "كاش")}</td>
+          <td>${esc(r.notes || "—")}</td>
+          <td class="amount pos">${esc(formatLYD(r.amount))}</td>
         </tr>`;
       })
       .join("");
@@ -384,22 +446,26 @@ function TreasuryPage() {
   <div class="meta">تاريخ الطباعة: ${formatPlainDate(new Date())}</div>
 
   <div class="kpis">
-    <div class="kpi"><div class="label">إجمالي المقبوضات</div><div class="value pos">${esc(formatLYD(totals.receipts))}</div></div>
+    <div class="kpi"><div class="label">إجمالي المقبوضات</div><div class="value pos">${esc(formatLYD(totals.receipts))}</div><div class="label">مصرف: ${esc(formatLYD(totals.receiptsBank))} · كاش: ${esc(formatLYD(totals.receiptsCash))}</div></div>
     <div class="kpi"><div class="label">إجمالي المصروفات</div><div class="value neg">${esc(formatLYD(totals.disbursements))}</div></div>
     <div class="kpi"><div class="label">صافي الخزينة (رصيد كلي)</div><div class="value">${esc(formatLYD(treasuryBalance))}</div><div class="label">صافي الفترة: ${esc(formatLYD(totals.net))}</div></div>
     <div class="kpi"><div class="label">إجمالي المديونيات</div><div class="value neg">${esc(formatLYD(debtorsTotals.totalDue))}</div></div>
   </div>
 
-  <h2>سجل المقبوضات (${filteredReceipts.length})</h2>
+  <h2>سجل المقبوضات (${receiptItems.length})</h2>
   ${
-    filteredReceipts.length === 0
+    receiptItems.length === 0
       ? '<div class="empty">لا توجد مقبوضات في هذه الفترة</div>'
       : `<table>
           <thead><tr>
             <th>التاريخ</th><th>العميل</th><th>المناسبة</th><th>طريقة الدفع</th><th>ملاحظات</th><th>المبلغ</th>
           </tr></thead>
           <tbody>${receiptsRows}</tbody>
-          <tfoot><tr><td colspan="5">الإجمالي</td><td class="amount pos">${esc(formatLYD(totals.receipts))}</td></tr></tfoot>
+          <tfoot>
+            <tr><td colspan="5">إجمالي المقبوضات المصرفية</td><td class="amount pos">${esc(formatLYD(totals.receiptsBank))}</td></tr>
+            <tr><td colspan="5">إجمالي المقبوضات النقدية</td><td class="amount pos">${esc(formatLYD(totals.receiptsCash))}</td></tr>
+            <tr><td colspan="5">الإجمالي</td><td class="amount pos">${esc(formatLYD(totals.receipts))}</td></tr>
+          </tfoot>
         </table>`
   }
 
@@ -504,6 +570,7 @@ function TreasuryPage() {
           label="إجمالي المقبوضات"
           value={formatLYD(totals.receipts)}
           tone="success"
+          hint={`مصرف: ${formatLYD(totals.receiptsBank)} · كاش: ${formatLYD(totals.receiptsCash)}`}
         />
         <KpiCard
           icon={ArrowUpCircle}
@@ -546,11 +613,11 @@ function TreasuryPage() {
             <div className="p-4 border-b bg-secondary/30 flex flex-wrap items-center justify-between gap-2">
               <h3 className="font-bold">سجل المقبوضات</h3>
               <Badge variant="secondary">
-                <LatinDigits>{filteredReceipts.length}</LatinDigits> عملية ·{" "}
+                <LatinDigits>{receiptItems.length}</LatinDigits> عملية ·{" "}
                 {formatLYD(totals.receipts)}
               </Badge>
             </div>
-            {filteredReceipts.length === 0 ? (
+            {receiptItems.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 لا توجد مقبوضات في الفترة المحددة
               </div>
@@ -560,47 +627,60 @@ function TreasuryPage() {
                   <thead className="bg-muted/40">
                     <tr className="text-right">
                       <th className="p-3 font-semibold">التاريخ</th>
-                      <th className="p-3 font-semibold">العميل</th>
-                      <th className="p-3 font-semibold">المناسبة</th>
+                      <th className="p-3 font-semibold">النوع</th>
+                      <th className="p-3 font-semibold">البيان</th>
+                      <th className="p-3 font-semibold">التفاصيل</th>
                       <th className="p-3 font-semibold">طريقة الدفع</th>
-                      <th className="p-3 font-semibold">ملاحظات</th>
                       <th className="p-3 font-semibold text-left">المبلغ</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredReceipts.map((p) => {
-                      const b = bookingById.get(String(p.booking_id));
-                      return (
-                        <tr key={p.id} className="border-t hover:bg-secondary/20">
-                          <td className="p-3 whitespace-nowrap">
-                            <span dir="ltr" className="inline-block">
-                              {formatPlainDate(p.payment_date)}
-                            </span>
-                          </td>
-                          <td className="p-3">{b?.customers?.full_name ?? "—"}</td>
-                          <td className="p-3 text-muted-foreground">
-                            {b ? (
-                              <span className="inline-flex items-center gap-1">
-                                {eventTypeLabels[b.event_type] ?? b.event_type}
-                                <span className="opacity-60">·</span>
-                                <span dir="ltr" className="inline-block">
-                                  {formatPlainDate(b.event_date)}
-                                </span>
-                              </span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
-                          <td className="p-3">{paymentMethodLabels[p.method] ?? p.method}</td>
-                          <td className="p-3 text-muted-foreground">{p.notes ?? "—"}</td>
-                          <td className="p-3 font-bold text-success text-left">
-                            {formatLYD(p.amount)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {receiptItems.map((r) => (
+                      <tr key={r.id} className="border-t hover:bg-secondary/20">
+                        <td className="p-3 whitespace-nowrap">
+                          <span dir="ltr" className="inline-block">
+                            {formatPlainDate(r.date)}
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          {r.kind === "booking" ? (
+                            <Badge variant="outline">دفعة حجز</Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-primary/5">
+                              قبض عام
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="p-3 font-medium">{r.title}</td>
+                        <td className="p-3 text-muted-foreground">{r.subtitle}</td>
+                        <td className="p-3">
+                          {r.method === "bank_transfer"
+                            ? "مصرف"
+                            : paymentMethodLabels[r.method] ?? "كاش"}
+                        </td>
+                        <td className="p-3 font-bold text-success text-left">
+                          {formatLYD(r.amount)}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                   <tfoot>
+                    <tr className="border-t bg-muted/30">
+                      <td className="p-3" colSpan={5}>
+                        إجمالي المقبوضات المصرفية
+                      </td>
+                      <td className="p-3 text-left font-semibold text-success">
+                        {formatLYD(totals.receiptsBank)}
+                      </td>
+                    </tr>
+                    <tr className="bg-muted/30">
+                      <td className="p-3" colSpan={5}>
+                        إجمالي المقبوضات النقدية
+                      </td>
+                      <td className="p-3 text-left font-semibold text-success">
+                        {formatLYD(totals.receiptsCash)}
+                      </td>
+                    </tr>
                     <tr className="border-t bg-muted/40 font-bold">
                       <td className="p-3" colSpan={5}>
                         الإجمالي

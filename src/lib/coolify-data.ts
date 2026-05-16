@@ -109,6 +109,60 @@ export const deleteExpenseFn: any = createServerFn({ method: "POST" }).handler(
   },
 );
 
+export const updateExpenseFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.updateExpense(data);
+  },
+);
+
+export const getExpenseCategoriesFn = createServerFn({ method: "GET" }).handler(async () => {
+  const services = await import("@/server/coolify-services.server");
+  return services.getExpenseCategories();
+});
+
+export const addExpenseCategoryFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.addExpenseCategory(data);
+  },
+);
+
+export const updateExpenseCategoryFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.updateExpenseCategory(data);
+  },
+);
+
+export const deleteExpenseCategoryFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.deleteExpenseCategory(data);
+  },
+);
+
+export const addGeneralReceiptFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.addGeneralReceipt(data);
+  },
+);
+
+export const updateGeneralReceiptFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.updateGeneralReceipt(data);
+  },
+);
+
+export const deleteGeneralReceiptFn: any = createServerFn({ method: "POST" }).handler(
+  async ({ data }: any) => {
+    const services = await import("@/server/coolify-services.server");
+    return services.deleteGeneralReceipt(data);
+  },
+);
+
 export const addWorkerFn: any = createServerFn({ method: "POST" }).handler(
   async ({ data }: any) => {
     const services = await import("@/server/coolify-services.server");

@@ -5,7 +5,9 @@ import { LatinDigits } from "@/components/LatinDigits";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight, Phone, User, Calendar, ChevronLeft, Pencil } from "lucide-react";
+import { ArrowRight, Phone, User, Calendar, ChevronLeft, Pencil, Printer } from "lucide-react";
+import { printPaymentReceipt, openPaymentPrintWindow } from "@/lib/print-payment-receipt";
+import logo from "@/assets/logo.png";
 import { PaymentEditDialog, type EditablePayment } from "@/components/PaymentEditDialog";
 import {
   formatLYD,
@@ -94,6 +96,50 @@ function CustomerDetailPage() {
     () => bookings.find((b) => b.id === editingBookingId) ?? null,
     [bookings, editingBookingId],
   );
+  function handlePrintPayment(b: BookingRow, p: PaymentRow) {
+    if (!customer) return;
+    const sortedPayments = [...b.payments].sort((x, y) => {
+      const dx = String(x.payment_date).localeCompare(String(y.payment_date));
+      if (dx !== 0) return dx;
+      return String(x.id).localeCompare(String(y.id));
+    });
+    let paidBefore = 0;
+    for (const x of sortedPayments) {
+      if (x.id === p.id) break;
+      paidBefore += Number(x.amount);
+    }
+    const paidAfter = paidBefore + Number(p.amount);
+    const remainingAfter = Math.max(0, Number(b.total_price) - paidAfter);
+    try {
+      const win = openPaymentPrintWindow();
+      printPaymentReceipt(
+        {
+          hallName: "VELOURA VENUE",
+          hallTagline: "FOR WEDDINGS & EVENTS",
+          logoUrl: logo,
+          receiptNo: String(p.id).slice(0, 8).toUpperCase(),
+          issuedAt: new Date().toISOString(),
+          customerName: customer.full_name,
+          customerPhone: customer.phone,
+          eventDate: b.event_date,
+          eventType: eventTypeLabels[b.event_type] ?? b.event_type,
+          paymentAmount: Number(p.amount),
+          paymentDate: p.payment_date,
+          paymentMethod: paymentMethodLabels[p.method] ?? p.method,
+          paymentNotes: p.notes,
+          totalPrice: Number(b.total_price),
+          paidBefore,
+          paidAfter,
+          remainingAfter,
+        },
+        win,
+      );
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "تعذر فتح نافذة الطباعة";
+      toast.error("فشل طباعة الوصل", { description });
+    }
+  }
+
   const editMaxAllowed = useMemo(() => {
     if (!editingBooking || !editingPayment) return 0;
     const otherPaid = editingBooking.payments
@@ -242,6 +288,16 @@ function CustomerDetailPage() {
                             <span className="font-bold text-success dir-ltr">
                               {formatLYD(p.amount)}
                             </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              title="طباعة وصل الدفعة"
+                              onClick={() => handlePrintPayment(b, p)}
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                            </Button>
                             <Button
                               type="button"
                               variant="ghost"

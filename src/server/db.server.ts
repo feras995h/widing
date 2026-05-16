@@ -145,9 +145,54 @@ async function ensureBookingOverlapProtection(): Promise<void> {
   globalForDb.__velouraBookingOverlapVersion = BOOKING_OVERLAP_VERSION;
 }
 
+async function ensureCashflowSchema(): Promise<void> {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS expense_categories (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT UNIQUE NOT NULL,
+      sort INT NOT NULL DEFAULT 0,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
+  const seedCheck = await db.query(`SELECT COUNT(*)::int AS count FROM expense_categories`);
+  const seedCount = Number((seedCheck.rows[0] as { count: number })?.count ?? 0);
+  if (seedCount === 0) {
+    const defaults = [
+      "كهرباء وماء",
+      "صيانة",
+      "مستلزمات",
+      "إيجار",
+      "تسويق",
+      "ضرائب",
+      "أخرى",
+    ];
+    for (let i = 0; i < defaults.length; i++) {
+      await db.query(
+        `INSERT INTO expense_categories (name, sort) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`,
+        [defaults[i], i],
+      );
+    }
+  }
+
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS general_receipts (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      category TEXT NOT NULL DEFAULT '',
+      amount NUMERIC(12,2) NOT NULL,
+      receipt_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      description TEXT NOT NULL DEFAULT '',
+      method TEXT NOT NULL DEFAULT 'cash',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+}
+
 export async function initializeDatabase(): Promise<void> {
   if (globalForDb.__velouraDbInitialized) {
     await ensureBookingOverlapProtection();
+    await ensureCashflowSchema();
     return;
   }
 
@@ -284,6 +329,8 @@ export async function initializeDatabase(): Promise<void> {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
   `);
+
+  await ensureCashflowSchema();
 
   globalForDb.__velouraDbInitialized = true;
 }

@@ -658,7 +658,7 @@ function ReportsPage() {
                   return (
                     <div key={cat}>
                       <div className="flex justify-between text-sm mb-1">
-                        <span>{expenseCategoryLabels[cat]}</span>
+                        <span>{expenseCategoryLabels[cat] ?? cat}</span>
                         <span className="font-bold">{formatLYD(amount)}</span>
                       </div>
                       <div className="h-2 bg-secondary rounded-full overflow-hidden">

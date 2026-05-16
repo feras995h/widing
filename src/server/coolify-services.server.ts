@@ -828,14 +828,25 @@ export async function createPayment(input: {
 }) {
   await initializeDatabase();
   await requireAuthUser();
-  await db.query(
+  const res = await db.query(
     `
       INSERT INTO payments (booking_id, amount, payment_date, method, notes)
       VALUES ($1,$2,$3,$4,$5)
+      RETURNING id, amount, payment_date, method, notes
     `,
     [input.bookingId, input.amount, input.paymentDate, input.method, input.notes],
   );
-  return { ok: true };
+  const row = res.rows[0] as { id: string; amount: string | number; payment_date: string; method: string; notes: string | null };
+  return {
+    ok: true,
+    payment: {
+      id: row.id,
+      amount: Number(row.amount),
+      payment_date: row.payment_date,
+      method: row.method,
+      notes: row.notes,
+    },
+  };
 }
 
 export async function updatePayment(input: {
@@ -1036,7 +1047,7 @@ export async function getReportsData() {
   await initializeDatabase();
   await requireRole(["owner", "accountant"]);
 
-  const [bookingsRes, paymentsRes, expensesRes, workerPaymentsRes] = await Promise.all([
+  const [bookingsRes, paymentsRes, expensesRes, workerPaymentsRes, generalReceiptsRes] = await Promise.all([
     db.query(`
           SELECT
             b.*,
@@ -1058,6 +1069,7 @@ export async function getReportsData() {
           FROM worker_payments wp
           JOIN workers w ON w.id = wp.worker_id
         `),
+    db.query(`SELECT * FROM general_receipts`),
   ]);
 
   return {
@@ -1083,13 +1095,17 @@ export async function getReportsData() {
         job_title: (row.worker_job_title as string) || "—",
       },
     })),
+    generalReceipts: generalReceiptsRes.rows.map((row: Record<string, unknown>) => ({
+      ...row,
+      amount: toNumber(row.amount),
+    })),
   };
 }
 
 export async function getExpensesData() {
   await initializeDatabase();
   await requireOwnerUser();
-  const [expenses, workers, workerPayments] = await Promise.all([
+  const [expenses, workers, workerPayments, categories, generalReceipts] = await Promise.all([
     db.query(`SELECT * FROM expenses ORDER BY expense_date DESC`),
     db.query(`SELECT * FROM workers ORDER BY full_name ASC`),
     db.query(`
@@ -1099,6 +1115,8 @@ export async function getExpensesData() {
         ORDER BY wp.payment_date DESC
         LIMIT 50
       `),
+    db.query(`SELECT * FROM expense_categories ORDER BY sort ASC, name ASC`),
+    db.query(`SELECT * FROM general_receipts ORDER BY receipt_date DESC`),
   ]);
 
   return {
@@ -1118,7 +1136,154 @@ export async function getExpensesData() {
         job_title: (row.worker_job_title as string) || "—",
       },
     })),
+    categories: categories.rows,
+    generalReceipts: generalReceipts.rows.map((row: Record<string, unknown>) => ({
+      ...row,
+      amount: toNumber(row.amount),
+    })),
   };
+}
+
+export async function getExpenseCategories() {
+  await initializeDatabase();
+  await requireOwnerUser();
+  const res = await db.query(
+    `SELECT * FROM expense_categories ORDER BY sort ASC, name ASC`,
+  );
+  return { categories: res.rows };
+}
+
+export async function addExpenseCategory(input: { name: string }) {
+  await initializeDatabase();
+  await requireOwnerUser();
+  const name = (input.name || "").trim();
+  if (!name) throw new Error("اسم الفئة مطلوب");
+  const sortRes = await db.query(
+    `SELECT COALESCE(MAX(sort), 0) + 1 AS next FROM expense_categories`,
+  );
+  const next = Number((sortRes.rows[0] as { next: number })?.next ?? 1);
+  await db.query(
+    `INSERT INTO expense_categories (name, sort) VALUES ($1, $2) ON CONFLICT (name) DO NOTHING`,
+    [name, next],
+  );
+  return { ok: true };
+}
+
+export async function updateExpenseCategory(input: {
+  id: string;
+  name: string;
+  isActive?: boolean;
+}) {
+  await initializeDatabase();
+  await requireOwnerUser();
+  const name = (input.name || "").trim();
+  if (!name) throw new Error("اسم الفئة مطلوب");
+  // capture old name to update related rows
+  const oldRes = await db.query(`SELECT name FROM expense_categories WHERE id = $1`, [input.id]);
+  const oldName = (oldRes.rows[0] as { name: string } | undefined)?.name;
+  await db.query(
+    `UPDATE expense_categories SET name = $1, is_active = COALESCE($2, is_active) WHERE id = $3`,
+    [name, input.isActive ?? null, input.id],
+  );
+  if (oldName && oldName !== name) {
+    await db.query(`UPDATE expenses SET category = $1 WHERE category = $2`, [name, oldName]);
+    await db.query(`UPDATE general_receipts SET category = $1 WHERE category = $2`, [
+      name,
+      oldName,
+    ]);
+  }
+  return { ok: true };
+}
+
+export async function deleteExpenseCategory(input: { id: string }) {
+  await initializeDatabase();
+  await requireOwnerUser();
+  const r = await db.query(`SELECT name FROM expense_categories WHERE id = $1`, [input.id]);
+  const cat = (r.rows[0] as { name: string } | undefined)?.name;
+  if (!cat) throw new Error("الفئة غير موجودة");
+  const usage = await db.query(
+    `SELECT
+      (SELECT COUNT(*)::int FROM expenses WHERE category = $1) AS exp_count,
+      (SELECT COUNT(*)::int FROM general_receipts WHERE category = $1) AS rec_count`,
+    [cat],
+  );
+  const u = usage.rows[0] as { exp_count: number; rec_count: number };
+  if (Number(u.exp_count) + Number(u.rec_count) > 0) {
+    throw new Error("لا يمكن حذف الفئة لأنها مستخدمة. يمكنك تعطيلها بدلًا من ذلك");
+  }
+  await db.query(`DELETE FROM expense_categories WHERE id = $1`, [input.id]);
+  return { ok: true };
+}
+
+export async function updateExpense(input: {
+  id: string;
+  category: string;
+  amount: number;
+  expenseDate: string;
+  description: string;
+}) {
+  await initializeDatabase();
+  await requireOwnerUser();
+  if (!(input.amount > 0)) throw new Error("المبلغ يجب أن يكون أكبر من صفر");
+  await db.query(
+    `UPDATE expenses
+       SET category = $1, amount = $2, expense_date = $3, description = $4
+     WHERE id = $5`,
+    [input.category, input.amount, input.expenseDate, input.description, input.id],
+  );
+  return { ok: true };
+}
+
+export async function addGeneralReceipt(input: {
+  category: string;
+  amount: number;
+  receiptDate: string;
+  description: string;
+  method: "cash" | "bank_transfer";
+}) {
+  await initializeDatabase();
+  await requireOwnerUser();
+  if (!(input.amount > 0)) throw new Error("المبلغ يجب أن يكون أكبر من صفر");
+  await db.query(
+    `INSERT INTO general_receipts (category, amount, receipt_date, description, method)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [input.category, input.amount, input.receiptDate, input.description, input.method],
+  );
+  return { ok: true };
+}
+
+export async function updateGeneralReceipt(input: {
+  id: string;
+  category: string;
+  amount: number;
+  receiptDate: string;
+  description: string;
+  method: "cash" | "bank_transfer";
+}) {
+  await initializeDatabase();
+  await requireOwnerUser();
+  if (!(input.amount > 0)) throw new Error("المبلغ يجب أن يكون أكبر من صفر");
+  await db.query(
+    `UPDATE general_receipts
+       SET category = $1, amount = $2, receipt_date = $3, description = $4, method = $5
+     WHERE id = $6`,
+    [
+      input.category,
+      input.amount,
+      input.receiptDate,
+      input.description,
+      input.method,
+      input.id,
+    ],
+  );
+  return { ok: true };
+}
+
+export async function deleteGeneralReceipt(input: { id: string }) {
+  await initializeDatabase();
+  await requireOwnerUser();
+  await db.query(`DELETE FROM general_receipts WHERE id = $1`, [input.id]);
+  return { ok: true };
 }
 
 export async function addExpense(input: {

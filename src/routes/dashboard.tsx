@@ -638,6 +638,17 @@ function DashboardPage() {
             Number(selectedBooking.total_price) -
             selectedBooking.payments.reduce((s, p) => s + Number(p.amount), 0)
           }
+          bookingContext={{
+            customerName: selectedBooking.customers.full_name,
+            customerPhone: selectedBooking.customers.phone,
+            eventDate: selectedBooking.event_date,
+            eventType: eventTypeLabels[selectedBooking.event_type] ?? "مناسبة",
+            totalPrice: Number(selectedBooking.total_price),
+            paidBefore: selectedBooking.payments.reduce(
+              (s, p) => s + Number(p.amount),
+              0,
+            ),
+          }}
           onSaved={() => {
             loadBookings();
             setSelectedBooking(null);

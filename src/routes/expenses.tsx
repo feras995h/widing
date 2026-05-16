@@ -29,22 +29,32 @@ import {
   Plus,
   Loader2,
   Trash2,
+  Pencil,
   Receipt,
+  ArrowDownCircle,
+  Tag,
   Users as UsersIcon,
   Briefcase,
   FileText,
   ChevronLeft,
 } from "lucide-react";
-import { formatLYD, formatShortDate, expenseCategoryLabels } from "@/lib/format";
+import { formatLYD, formatShortDate, paymentMethodLabels } from "@/lib/format";
 import { toast } from "sonner";
 import {
   addExpenseFn,
+  addExpenseCategoryFn,
+  addGeneralReceiptFn,
   addWorkerFn,
   addWorkerPaymentFn,
   deleteExpenseFn,
+  deleteExpenseCategoryFn,
+  deleteGeneralReceiptFn,
   deleteWorkerFn,
   getExpensesDataFn,
   toggleWorkerActiveFn,
+  updateExpenseCategoryFn,
+  updateExpenseFn,
+  updateGeneralReceiptFn,
 } from "@/lib/coolify-data";
 import { sessionHeaders } from "@/lib/client-session";
 
@@ -81,28 +91,47 @@ interface WorkerPayment {
   workers: { full_name: string; job_title: string };
 }
 
+interface Category {
+  id: string;
+  name: string;
+  sort: number;
+  is_active: boolean;
+}
+
 function ExpensesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">المصروفات</h1>
-        <p className="text-sm text-muted-foreground">إدارة المصروفات العامة ورواتب العمال</p>
+        <h1 className="text-2xl font-bold">الحركة المالية</h1>
+        <p className="text-sm text-muted-foreground">المقبوضات والمصروفات والرواتب وفئات الصرف</p>
       </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 max-w-3xl">
           <TabsTrigger value="general">
-            <Receipt className="w-4 h-4 ml-1" /> مصروفات عامة
+            <Receipt className="w-4 h-4 ml-1" /> مصروفات
+          </TabsTrigger>
+          <TabsTrigger value="receipts">
+            <ArrowDownCircle className="w-4 h-4 ml-1" /> المقبوضات
           </TabsTrigger>
           <TabsTrigger value="workers">
             <UsersIcon className="w-4 h-4 ml-1" /> العمال والرواتب
+          </TabsTrigger>
+          <TabsTrigger value="categories">
+            <Tag className="w-4 h-4 ml-1" /> الفئات
           </TabsTrigger>
         </TabsList>
         <TabsContent value="general" className="mt-6">
           <GeneralExpenses />
         </TabsContent>
+        <TabsContent value="receipts" className="mt-6">
+          <GeneralReceipts />
+        </TabsContent>
         <TabsContent value="workers" className="mt-6">
           <WorkersSection />
+        </TabsContent>
+        <TabsContent value="categories" className="mt-6">
+          <CategoriesManager />
         </TabsContent>
       </Tabs>
     </div>
@@ -111,33 +140,51 @@ function ExpensesPage() {
 
 function GeneralExpenses() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Expense | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function load() {
     const res = await getExpensesDataFn({ headers: sessionHeaders() });
     setExpenses((res.expenses as Expense[]) ?? []);
+    setCategories(((res.categories as Category[]) ?? []).filter((c) => c.is_active));
   }
   useEffect(() => {
     load();
   }, []);
+
+  function openAdd() {
+    setEditing(null);
+    setOpen(true);
+  }
+  function openEdit(exp: Expense) {
+    setEditing(exp);
+    setOpen(true);
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
     setLoading(true);
     try {
-      await addExpenseFn({
-        headers: sessionHeaders(),
-        data: {
-          category: fd.get("category") as string,
-          amount: parseFloat(fd.get("amount") as string),
-          expenseDate: fd.get("expense_date") as string,
-          description: fd.get("description") as string,
-        },
-      });
+      const payload = {
+        category: fd.get("category") as string,
+        amount: parseFloat(fd.get("amount") as string),
+        expenseDate: fd.get("expense_date") as string,
+        description: fd.get("description") as string,
+      };
+      if (editing) {
+        await updateExpenseFn({
+          headers: sessionHeaders(),
+          data: { id: editing.id, ...payload },
+        });
+      } else {
+        await addExpenseFn({ headers: sessionHeaders(), data: payload });
+      }
       toast.success("تم الحفظ");
       setOpen(false);
+      setEditing(null);
       await load();
     } catch (err) {
       const description = err instanceof Error ? err.message : "فشل الحفظ";
@@ -159,6 +206,8 @@ function GeneralExpenses() {
   }
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
+  const defaultCategory =
+    editing?.category ?? (categories[0]?.name ?? "أخرى");
 
   return (
     <div className="space-y-4">
@@ -167,36 +216,54 @@ function GeneralExpenses() {
           <p className="text-xs text-muted-foreground">إجمالي المصروفات</p>
           <p className="text-2xl font-bold text-primary">{formatLYD(total)}</p>
         </Card>
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+          open={open}
+          onOpenChange={(v) => {
+            setOpen(v);
+            if (!v) setEditing(null);
+          }}
+        >
           <DialogTrigger asChild>
-            <Button className="bg-gradient-primary">
+            <Button className="bg-gradient-primary" onClick={openAdd}>
               <Plus className="w-4 h-4 ml-1" /> مصروف جديد
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>إضافة مصروف</DialogTitle>
+              <DialogTitle>{editing ? "تعديل مصروف" : "إضافة مصروف"}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" key={editing?.id ?? "new"}>
               <div className="space-y-2">
                 <Label>الفئة *</Label>
-                <Select name="category" defaultValue="other">
+                <Select name="category" defaultValue={defaultCategory}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(expenseCategoryLabels).map(([v, l]) => (
-                      <SelectItem key={v} value={v}>
-                        {l}
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.name}>
+                        {c.name}
                       </SelectItem>
                     ))}
+                    {editing &&
+                      !categories.some((c) => c.name === editing.category) && (
+                        <SelectItem value={editing.category}>{editing.category}</SelectItem>
+                      )}
                   </SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-2">
                   <Label htmlFor="amount">المبلغ (د.ل) *</Label>
-                  <Input id="amount" name="amount" type="number" min={0.01} step="0.01" required />
+                  <Input
+                    id="amount"
+                    name="amount"
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    required
+                    defaultValue={editing?.amount}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="expense_date">التاريخ *</Label>
@@ -205,13 +272,23 @@ function GeneralExpenses() {
                     name="expense_date"
                     type="date"
                     required
-                    defaultValue={new Date().toISOString().slice(0, 10)}
+                    defaultValue={
+                      editing?.expense_date
+                        ? String(editing.expense_date).slice(0, 10)
+                        : new Date().toISOString().slice(0, 10)
+                    }
                   />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">الوصف *</Label>
-                <Textarea id="description" name="description" required rows={2} />
+                <Textarea
+                  id="description"
+                  name="description"
+                  required
+                  rows={2}
+                  defaultValue={editing?.description ?? ""}
+                />
               </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setOpen(false)}>
@@ -240,7 +317,7 @@ function GeneralExpenses() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-semibold truncate">{e.description}</p>
                     <Badge variant="secondary" className="text-xs">
-                      {expenseCategoryLabels[e.category]}
+                      {e.category}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">{formatShortDate(e.expense_date)}</p>
@@ -248,9 +325,437 @@ function GeneralExpenses() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 <p className="font-bold text-destructive">{formatLYD(e.amount)}</p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  title="تعديل"
+                  onClick={() => openEdit(e)}
+                >
+                  <Pencil className="w-4 h-4 text-primary" />
+                </Button>
                 <Button variant="ghost" size="icon" onClick={() => handleDelete(e.id)}>
                   <Trash2 className="w-4 h-4 text-destructive" />
                 </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface GeneralReceipt {
+  id: string;
+  category: string;
+  amount: number;
+  receipt_date: string;
+  description: string;
+  method: "cash" | "bank_transfer";
+}
+
+function GeneralReceipts() {
+  const [receipts, setReceipts] = useState<GeneralReceipt[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<GeneralReceipt | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    const res = await getExpensesDataFn({ headers: sessionHeaders() });
+    setReceipts((res.generalReceipts as GeneralReceipt[]) ?? []);
+    setCategories(((res.categories as Category[]) ?? []).filter((c) => c.is_active));
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  function openAdd() {
+    setEditing(null);
+    setOpen(true);
+  }
+  function openEdit(r: GeneralReceipt) {
+    setEditing(r);
+    setOpen(true);
+  }
+
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    setLoading(true);
+    try {
+      const payload = {
+        category: fd.get("category") as string,
+        amount: parseFloat(fd.get("amount") as string),
+        receiptDate: fd.get("receipt_date") as string,
+        description: (fd.get("description") as string) || "",
+        method: fd.get("method") as "cash" | "bank_transfer",
+      };
+      if (editing) {
+        await updateGeneralReceiptFn({
+          headers: sessionHeaders(),
+          data: { id: editing.id, ...payload },
+        });
+      } else {
+        await addGeneralReceiptFn({ headers: sessionHeaders(), data: payload });
+      }
+      toast.success("تم الحفظ");
+      setOpen(false);
+      setEditing(null);
+      await load();
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "فشل الحفظ";
+      toast.error("فشل الحفظ", { description });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm("هل تريد حذف هذا القبض؟")) return;
+    try {
+      await deleteGeneralReceiptFn({ headers: sessionHeaders(), data: { id } });
+      toast.success("تم الحذف");
+      await load();
+    } catch {
+      toast.error("فشل الحذف");
+    }
+  }
+
+  const total = receipts.reduce((s, r) => s + Number(r.amount), 0);
+  const defaultCategory = editing?.category ?? (categories[0]?.name ?? "");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <Card className="p-4 bg-gradient-to-br from-success/10 to-success/5 border-success/20">
+          <p className="text-xs text-muted-foreground">إجمالي المقبوضات اليدوية</p>
+          <p className="text-2xl font-bold text-success">{formatLYD(total)}</p>
+        </Card>
+        <Dialog
+          open={open}
+          onOpenChange={(v) => {
+            setOpen(v);
+            if (!v) setEditing(null);
+          }}
+        >
+          <DialogTrigger asChild>
+            <Button className="bg-gradient-primary" onClick={openAdd}>
+              <Plus className="w-4 h-4 ml-1" /> قبض جديد
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{editing ? "تعديل قبض" : "إضافة قبض"}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4" key={editing?.id ?? "new"}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>الفئة *</Label>
+                  <Select name="category" defaultValue={defaultCategory}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="اختر فئة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.name}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                      {editing &&
+                        !categories.some((c) => c.name === editing.category) && (
+                          <SelectItem value={editing.category}>{editing.category}</SelectItem>
+                        )}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>طريقة الدفع *</Label>
+                  <Select name="method" defaultValue={editing?.method ?? "cash"}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">كاش</SelectItem>
+                      <SelectItem value="bank_transfer">مصرف</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="r_amount">المبلغ (د.ل) *</Label>
+                  <Input
+                    id="r_amount"
+                    name="amount"
+                    type="number"
+                    min={0.01}
+                    step="0.01"
+                    required
+                    defaultValue={editing?.amount}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="r_date">التاريخ *</Label>
+                  <Input
+                    id="r_date"
+                    name="receipt_date"
+                    type="date"
+                    required
+                    defaultValue={
+                      editing?.receipt_date
+                        ? String(editing.receipt_date).slice(0, 10)
+                        : new Date().toISOString().slice(0, 10)
+                    }
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="r_description">البيان</Label>
+                <Textarea
+                  id="r_description"
+                  name="description"
+                  rows={2}
+                  defaultValue={editing?.description ?? ""}
+                />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+                  إلغاء
+                </Button>
+                <Button type="submit" disabled={loading} className="bg-gradient-primary">
+                  {loading && <Loader2 className="w-4 h-4 animate-spin ml-2" />}حفظ
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {receipts.length === 0 ? (
+        <Card className="p-12 text-center text-muted-foreground">لا توجد مقبوضات بعد</Card>
+      ) : (
+        <div className="space-y-2">
+          {receipts.map((r) => (
+            <Card key={r.id} className="p-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="w-10 h-10 rounded-lg bg-success/10 flex items-center justify-center shrink-0">
+                  <ArrowDownCircle className="w-5 h-5 text-success" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-semibold truncate">{r.description || "—"}</p>
+                    {r.category && (
+                      <Badge variant="secondary" className="text-xs">
+                        {r.category}
+                      </Badge>
+                    )}
+                    <Badge
+                      variant="outline"
+                      className="text-xs bg-primary/5"
+                    >
+                      {r.method === "bank_transfer" ? "مصرف" : "كاش"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{formatShortDate(r.receipt_date)}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <p className="font-bold text-success">{formatLYD(r.amount)}</p>
+                <Button variant="ghost" size="icon" title="تعديل" onClick={() => openEdit(r)}>
+                  <Pencil className="w-4 h-4 text-primary" />
+                </Button>
+                <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)}>
+                  <Trash2 className="w-4 h-4 text-destructive" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CategoriesManager() {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [name, setName] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    const res = await getExpensesDataFn({ headers: sessionHeaders() });
+    setCategories((res.categories as Category[]) ?? []);
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function handleAdd(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setLoading(true);
+    try {
+      await addExpenseCategoryFn({ headers: sessionHeaders(), data: { name: name.trim() } });
+      toast.success("تمت الإضافة");
+      setName("");
+      await load();
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "فشل الحفظ";
+      toast.error("فشل", { description });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSaveEdit(c: Category) {
+    if (!editingName.trim()) return;
+    try {
+      await updateExpenseCategoryFn({
+        headers: sessionHeaders(),
+        data: { id: c.id, name: editingName.trim() },
+      });
+      toast.success("تم الحفظ");
+      setEditingId(null);
+      setEditingName("");
+      await load();
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "فشل الحفظ";
+      toast.error("فشل", { description });
+    }
+  }
+
+  async function handleToggle(c: Category) {
+    try {
+      await updateExpenseCategoryFn({
+        headers: sessionHeaders(),
+        data: { id: c.id, name: c.name, isActive: !c.is_active },
+      });
+      await load();
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "فشل";
+      toast.error("فشل", { description });
+    }
+  }
+
+  async function handleDelete(c: Category) {
+    if (!confirm(`حذف الفئة "${c.name}"؟`)) return;
+    try {
+      await deleteExpenseCategoryFn({ headers: sessionHeaders(), data: { id: c.id } });
+      toast.success("تم الحذف");
+      await load();
+    } catch (err) {
+      const description = err instanceof Error ? err.message : "فشل الحذف";
+      toast.error("فشل الحذف", { description });
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card className="p-4">
+        <form onSubmit={handleAdd} className="flex items-end gap-2 flex-wrap">
+          <div className="flex-1 min-w-[180px] space-y-2">
+            <Label htmlFor="cat_name">إضافة فئة جديدة</Label>
+            <Input
+              id="cat_name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="مثال: ضيافة"
+            />
+          </div>
+          <Button type="submit" disabled={loading || !name.trim()} className="bg-gradient-primary">
+            {loading && <Loader2 className="w-4 h-4 animate-spin ml-2" />}
+            <Plus className="w-4 h-4 ml-1" /> إضافة
+          </Button>
+        </form>
+      </Card>
+
+      {categories.length === 0 ? (
+        <Card className="p-12 text-center text-muted-foreground">لا توجد فئات</Card>
+      ) : (
+        <div className="space-y-2">
+          {categories.map((c) => (
+            <Card
+              key={c.id}
+              className={`p-3 flex items-center justify-between gap-3 ${
+                !c.is_active ? "opacity-60" : ""
+              }`}
+            >
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <Tag className="w-4 h-4 text-primary shrink-0" />
+                {editingId === c.id ? (
+                  <Input
+                    value={editingName}
+                    onChange={(e) => setEditingName(e.target.value)}
+                    className="max-w-xs"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveEdit(c);
+                      if (e.key === "Escape") {
+                        setEditingId(null);
+                        setEditingName("");
+                      }
+                    }}
+                  />
+                ) : (
+                  <p className="font-semibold truncate">{c.name}</p>
+                )}
+                {!c.is_active && (
+                  <Badge variant="outline" className="text-xs">
+                    معطّلة
+                  </Badge>
+                )}
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Switch
+                  checked={c.is_active}
+                  onCheckedChange={() => handleToggle(c)}
+                  title="نشطة/معطّلة"
+                />
+                {editingId === c.id ? (
+                  <>
+                    <Button
+                      size="sm"
+                      className="bg-gradient-primary"
+                      onClick={() => handleSaveEdit(c)}
+                    >
+                      حفظ
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingId(null);
+                        setEditingName("");
+                      }}
+                    >
+                      إلغاء
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setEditingId(c.id);
+                        setEditingName(c.name);
+                      }}
+                      title="تعديل"
+                    >
+                      <Pencil className="w-4 h-4 text-primary" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleDelete(c)}
+                      title="حذف"
+                    >
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </>
+                )}
               </div>
             </Card>
           ))}

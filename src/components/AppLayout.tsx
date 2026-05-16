@@ -18,7 +18,7 @@ type NavItem = {
 const navItems: NavItem[] = [
   { to: "/dashboard", label: "الحجوزات", icon: Calendar, roles: ["owner", "staff"] },
   { to: "/customers", label: "العملاء", icon: Users, roles: ["owner"] },
-  { to: "/expenses", label: "المصروفات", icon: Wallet, roles: ["owner"] },
+  { to: "/expenses", label: "الحركة المالية", icon: Wallet, roles: ["owner"] },
   { to: "/treasury", label: "الخزينة", icon: Banknote, roles: ["owner", "accountant"] },
   { to: "/reports", label: "التقارير", icon: BarChart3, roles: ["owner", "accountant"] },
   { to: "/access", label: "الصلاحيات", icon: ShieldCheck, roles: ["owner"] },
