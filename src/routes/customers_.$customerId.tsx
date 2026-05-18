@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ArrowRight, Phone, User, Calendar, ChevronLeft, Pencil, Printer } from "lucide-react";
 import { printPaymentReceipt, openPaymentPrintWindow } from "@/lib/print-payment-receipt";
 import logo from "@/assets/logo.png";
+import { MANAGER_SIGNATURE_DATA_URL } from "@/lib/manager-signature";
 import { PaymentEditDialog, type EditablePayment } from "@/components/PaymentEditDialog";
 import {
   formatLYD,
@@ -117,6 +118,7 @@ function CustomerDetailPage() {
           hallName: "VELOURA VENUE",
           hallTagline: "FOR WEDDINGS & EVENTS",
           logoUrl: logo,
+          managerSignatureUrl: MANAGER_SIGNATURE_DATA_URL,
           receiptNo: String(p.id).slice(0, 8).toUpperCase(),
           issuedAt: new Date().toISOString(),
           customerName: customer.full_name,

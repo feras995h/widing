@@ -748,13 +748,6 @@ function renderHtml(data: BookingReceiptData): string {
         ${notesHtml}
         ${contractHtml}
 
-        <section class="staff-signature">
-          <p class="sig-title">توقيع إدارة الصالة</p>
-          <div class="sig-preview" id="staffSigPreview">
-            ${data.managerSignatureUrl ? `<img alt="توقيع إدارة الصالة" src="${esc(data.managerSignatureUrl)}" />` : `<span class="sig-placeholder">لم يتم رفع توقيع الإدارة</span>`}
-          </div>
-          <div class="muted">توقيع معتمد ثابت — ${esc(data.hallName)}</div>
-        </section>
         <p class="footer-note">شكراً لثقتكم — ${esc(data.hallName)}</p>
         </div>
       </main>

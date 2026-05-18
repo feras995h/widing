@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { openBookingPrintWindow, printBookingReceipt } from "@/lib/print-booking-receipt";
 import logo from "@/assets/logo.png";
+import { MANAGER_SIGNATURE_DATA_URL } from "@/lib/manager-signature";
 import { cancelBookingFn, getDashboardBookingsFn } from "@/lib/coolify-data";
 import { sessionHeaders } from "@/lib/client-session";
 
@@ -206,6 +207,7 @@ function DashboardPage() {
           hallName: "VELOURA VENUE",
           hallTagline: "FOR WEDDINGS & EVENTS",
           logoUrl: logo,
+          managerSignatureUrl: MANAGER_SIGNATURE_DATA_URL,
           receiptNo: booking.id.slice(0, 8).toUpperCase(),
           issuedAt: new Date().toISOString(),
           customerName: booking.customers.full_name,
