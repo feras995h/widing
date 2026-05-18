@@ -23,7 +23,9 @@ import {
   FileText,
   ChevronLeft,
   Printer,
+  Pencil,
 } from "lucide-react";
+import { PaymentEditDialog, type EditablePayment } from "@/components/PaymentEditDialog";
 import {
   formatLYD,
   eventTypeLabels,
@@ -122,9 +124,17 @@ function TreasuryPage() {
   const [generalReceipts, setGeneralReceipts] = useState<GeneralReceiptRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [debtorSearch, setDebtorSearch] = useState("");
+  // فلاتر سجل المصروفات الإضافية
+  const [expFrom, setExpFrom] = useState<string>("");
+  const [expTo, setExpTo] = useState<string>("");
+  const [expCategory, setExpCategory] = useState<string>("all");
+  const [expKind, setExpKind] = useState<"all" | "expense" | "salary">("all");
+  // تعديل دفعات الزبائن من الخزينة
+  const [editingPayment, setEditingPayment] = useState<EditablePayment | null>(null);
+  const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    getReportsDataFn({ headers: sessionHeaders() })
+  function loadData() {
+    return getReportsDataFn({ headers: sessionHeaders() })
       .then((res: any) => {
         setBookings(res.bookings ?? []);
         setPayments(res.payments ?? []);
@@ -137,6 +147,11 @@ function TreasuryPage() {
         toast.error("فشل تحميل بيانات الخزينة", { description });
       })
       .finally(() => setLoading(false));
+  }
+
+  useEffect(() => {
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function inRange(dateStr: string) {
@@ -253,6 +268,7 @@ function TreasuryPage() {
     subtitle: string;
     amount: number;
     notes: string | null;
+    category: string | null;
   };
 
   const disbursements: DisbursementRow[] = useMemo(() => {
@@ -264,6 +280,7 @@ function TreasuryPage() {
       subtitle: e.description ?? "—",
       amount: Number(e.amount),
       notes: null,
+      category: e.category ?? null,
     }));
     const b: DisbursementRow[] = filteredWorkerPayments.map((w) => ({
       id: `w-${w.id}`,
@@ -273,9 +290,34 @@ function TreasuryPage() {
       subtitle: `${w.workers.job_title}${w.payment_period ? ` · ${w.payment_period}` : ""}`,
       amount: Number(w.amount),
       notes: w.notes,
+      category: null,
     }));
     return [...a, ...b].sort((x, y) => (x.date < y.date ? 1 : -1));
   }, [filteredGeneralExpenses, filteredWorkerPayments]);
+
+  const filteredDisbursements = useMemo(() => {
+    return disbursements.filter((d) => {
+      if (expKind !== "all" && d.kind !== expKind) return false;
+      if (expCategory !== "all") {
+        if (d.kind !== "expense") return false;
+        if ((d.category ?? "") !== expCategory) return false;
+      }
+      if (expFrom) {
+        const ds = String(d.date).slice(0, 10);
+        if (ds < expFrom) return false;
+      }
+      if (expTo) {
+        const ds = String(d.date).slice(0, 10);
+        if (ds > expTo) return false;
+      }
+      return true;
+    });
+  }, [disbursements, expKind, expCategory, expFrom, expTo]);
+
+  const filteredDisbursementsTotal = useMemo(
+    () => filteredDisbursements.reduce((s, d) => s + Number(d.amount), 0),
+    [filteredDisbursements],
+  );
 
   const totals = useMemo(() => {
     const receipts = receiptItems.reduce((s, r) => s + Number(r.amount), 0);
@@ -359,6 +401,89 @@ function TreasuryPage() {
   }, [debtors]);
 
   const periodLabel = month === "all" ? `سنة ${year}` : `${ARABIC_MONTHS[month]} ${year}`;
+
+  const editMaxAllowed = useMemo(() => {
+    if (!editingPayment || !editingBookingId) return 0;
+    const b = bookingById.get(String(editingBookingId));
+    if (!b) return 0;
+    const otherPaid = (payments || [])
+      .filter((p) => String(p.booking_id) === String(editingBookingId) && p.id !== editingPayment.id)
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    return Math.max(0, Number(b.total_price) - otherPaid);
+  }, [editingPayment, editingBookingId, bookingById, payments]);
+
+  function handlePrintExpenses() {
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) {
+      toast.error("تعذر فتح نافذة الطباعة", { description: "تأكد من السماح بالنوافذ المنبثقة" });
+      return;
+    }
+    const esc = (s: unknown) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    const rows = filteredDisbursements
+      .map(
+        (d) => `<tr>
+          <td class="date">${formatPlainDate(d.date)}</td>
+          <td>${d.kind === "expense" ? "مصروف عام" : "راتب عامل"}</td>
+          <td>${esc(d.title)}</td>
+          <td>${esc(d.subtitle)}</td>
+          <td>${esc(d.notes ?? "—")}</td>
+          <td class="amount neg">${esc(formatLYD(d.amount))}</td>
+        </tr>`,
+      )
+      .join("");
+    const filterParts: string[] = [`الفترة: ${esc(periodLabel)}`];
+    if (expFrom) filterParts.push(`من: ${esc(expFrom)}`);
+    if (expTo) filterParts.push(`إلى: ${esc(expTo)}`);
+    if (expKind !== "all") filterParts.push(`النوع: ${expKind === "expense" ? "مصروف عام" : "راتب عامل"}`);
+    if (expCategory !== "all") filterParts.push(`التصنيف: ${esc(expenseCategoryLabels[expCategory] ?? expCategory)}`);
+    const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>سجل المصروفات</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  body { font-family: "Segoe UI", "Tahoma", Arial, sans-serif; color: #111; margin: 0; padding: 0; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .meta { color: #555; font-size: 12px; margin-bottom: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead th { background: #f3ead4; color: #5a4310; text-align: right; padding: 6px 8px; border: 1px solid #d8c98b; font-weight: 700; }
+  tbody td { padding: 6px 8px; border: 1px solid #e3e3e3; }
+  tbody tr:nth-child(even) td { background: #fafafa; }
+  .amount { text-align: left; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .date { white-space: nowrap; direction: ltr; unicode-bidi: isolate; text-align: right; }
+  .neg { color: #b03030; font-weight: 700; }
+  tfoot td { background: #f3ead4; font-weight: 700; border: 1px solid #d8c98b; padding: 6px 8px; }
+  .empty { padding: 16px; text-align: center; color: #777; border: 1px dashed #ddd; border-radius: 6px; }
+</style>
+</head>
+<body>
+  <h1>سجل المصروفات</h1>
+  <div class="meta">${filterParts.join(" · ")}</div>
+  <div class="meta">تاريخ الطباعة: ${formatPlainDate(new Date())}</div>
+  ${
+    filteredDisbursements.length === 0
+      ? '<div class="empty">لا توجد مصروفات مطابقة للفلاتر</div>'
+      : `<table>
+          <thead><tr>
+            <th>التاريخ</th><th>النوع</th><th>البيان</th><th>التفاصيل</th><th>ملاحظات</th><th>المبلغ</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr><td colspan="5">الإجمالي</td><td class="amount neg">${esc(formatLYD(filteredDisbursementsTotal))}</td></tr></tfoot>
+        </table>`
+  }
+  <script>
+    window.addEventListener('load', function () { setTimeout(function () { window.focus(); window.print(); }, 150); });
+  </script>
+</body></html>`;
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+  }
 
   function handlePrint() {
     const win = window.open("", "_blank", "width=900,height=700");
@@ -632,6 +757,7 @@ function TreasuryPage() {
                       <th className="p-3 font-semibold">التفاصيل</th>
                       <th className="p-3 font-semibold">طريقة الدفع</th>
                       <th className="p-3 font-semibold text-left">المبلغ</th>
+                      <th className="p-3 font-semibold"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -661,6 +787,32 @@ function TreasuryPage() {
                         <td className="p-3 font-bold text-success text-left">
                           {formatLYD(r.amount)}
                         </td>
+                        <td className="p-3 text-left">
+                          {r.kind === "booking" && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              title="تعديل الدفعة"
+                              onClick={() => {
+                                const realId = r.id.startsWith("p-") ? r.id.slice(2) : r.id;
+                                const p = payments.find((x) => String(x.id) === String(realId));
+                                if (!p) return;
+                                setEditingBookingId(String(p.booking_id));
+                                setEditingPayment({
+                                  id: String(p.id),
+                                  amount: Number(p.amount),
+                                  payment_date: p.payment_date,
+                                  method: p.method,
+                                  notes: p.notes,
+                                });
+                              }}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -672,6 +824,7 @@ function TreasuryPage() {
                       <td className="p-3 text-left font-semibold text-success">
                         {formatLYD(totals.receiptsBank)}
                       </td>
+                      <td></td>
                     </tr>
                     <tr className="bg-muted/30">
                       <td className="p-3" colSpan={5}>
@@ -680,12 +833,14 @@ function TreasuryPage() {
                       <td className="p-3 text-left font-semibold text-success">
                         {formatLYD(totals.receiptsCash)}
                       </td>
+                      <td></td>
                     </tr>
                     <tr className="border-t bg-muted/40 font-bold">
                       <td className="p-3" colSpan={5}>
                         الإجمالي
                       </td>
                       <td className="p-3 text-left text-success">{formatLYD(totals.receipts)}</td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 </table>
@@ -697,14 +852,84 @@ function TreasuryPage() {
         {/* الصرف */}
         <TabsContent value="disbursements" className="mt-6">
           <Card className="p-0 overflow-hidden">
-            <div className="p-4 border-b bg-secondary/30 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="font-bold">سجل المصروفات</h3>
-              <Badge variant="secondary">
-                <LatinDigits>{disbursements.length}</LatinDigits> عملية ·{" "}
-                {formatLYD(totals.disbursements)}
-              </Badge>
+            <div className="p-4 border-b bg-secondary/30 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-bold">سجل المصروفات</h3>
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary">
+                    <LatinDigits>{filteredDisbursements.length}</LatinDigits> عملية ·{" "}
+                    {formatLYD(filteredDisbursementsTotal)}
+                  </Badge>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={handlePrintExpenses}
+                    title="طباعة سجل المصروفات (بحسب الفلاتر)"
+                  >
+                    <Printer className="w-4 h-4" />
+                    طباعة المصروفات
+                  </Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">من تاريخ</label>
+                  <Input type="date" value={expFrom} onChange={(e) => setExpFrom(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">إلى تاريخ</label>
+                  <Input type="date" value={expTo} onChange={(e) => setExpTo(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">النوع</label>
+                  <Select value={expKind} onValueChange={(v) => setExpKind(v as any)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      <SelectItem value="expense">مصروف عام</SelectItem>
+                      <SelectItem value="salary">راتب عامل</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">تصنيف المصروف</label>
+                  <Select value={expCategory} onValueChange={setExpCategory}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">الكل</SelectItem>
+                      {Object.entries(expenseCategoryLabels).map(([v, l]) => (
+                        <SelectItem key={v} value={v}>
+                          {l}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">&nbsp;</label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => {
+                      setExpFrom("");
+                      setExpTo("");
+                      setExpKind("all");
+                      setExpCategory("all");
+                    }}
+                  >
+                    إعادة تعيين الفلاتر
+                  </Button>
+                </div>
+              </div>
             </div>
-            {disbursements.length === 0 ? (
+            {filteredDisbursements.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 لا توجد مصروفات في الفترة المحددة
               </div>
@@ -722,7 +947,7 @@ function TreasuryPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {disbursements.map((d) => (
+                    {filteredDisbursements.map((d) => (
                       <tr key={d.id} className="border-t hover:bg-secondary/20">
                         <td className="p-3 whitespace-nowrap">
                           <span dir="ltr" className="inline-block">
@@ -753,7 +978,7 @@ function TreasuryPage() {
                         الإجمالي
                       </td>
                       <td className="p-3 text-left text-warning">
-                        {formatLYD(totals.disbursements)}
+                        {formatLYD(filteredDisbursementsTotal)}
                       </td>
                     </tr>
                   </tfoot>
@@ -862,6 +1087,23 @@ function TreasuryPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <PaymentEditDialog
+        open={!!editingPayment}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditingPayment(null);
+            setEditingBookingId(null);
+          }
+        }}
+        payment={editingPayment}
+        maxAllowed={editMaxAllowed}
+        onSaved={() => {
+          setEditingPayment(null);
+          setEditingBookingId(null);
+          loadData();
+        }}
+      />
     </div>
   );
 }

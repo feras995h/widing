@@ -23,6 +23,7 @@ import { Loader2 } from "lucide-react";
 import { eventTypeLabels } from "@/lib/format";
 import { openBookingPrintWindow, printBookingReceipt } from "@/lib/print-booking-receipt";
 import logo from "@/assets/logo.png";
+import { MANAGER_SIGNATURE_DATA_URL } from "@/lib/manager-signature";
 import { createBookingFn, getCustomersFn, updateBookingFn } from "@/lib/coolify-data";
 import { sessionHeaders } from "@/lib/client-session";
 
@@ -248,6 +249,7 @@ export function BookingDialog({
             hallName: "VELOURA VENUE",
             hallTagline: "FOR WEDDINGS & EVENTS",
             logoUrl: logo,
+            managerSignatureUrl: MANAGER_SIGNATURE_DATA_URL,
             receiptNo: newBooking.id.slice(0, 8).toUpperCase(),
             issuedAt: new Date().toISOString(),
             customerName,

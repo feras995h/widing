@@ -8,6 +8,7 @@ export interface PaymentReceiptData {
   hallName: string;
   hallTagline?: string;
   logoUrl?: string;
+  managerSignatureUrl?: string;
   receiptNo: string;
   issuedAt: string; // ISO
 
@@ -119,15 +120,22 @@ function renderHtml(d: PaymentReceiptData): string {
     .notes { margin-top: 10px; font-size: 12px; color: #555; padding: 8px 10px; background: #faf6ec; border-right: 3px solid #c9a96b; border-radius: 4px; }
     .signs { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 22px; padding-top: 14px; border-top: 1px dashed #c9a96b; }
     .signs .box { font-size: 13px; }
-    .signs .box .line { margin-top: 30px; border-bottom: 1px solid #999; }
+    .signs .box .line { margin-top: 30px; border-bottom: 1px solid #999; min-height: 1px; }
+    .signs .box .sig-img { margin-top: 6px; text-align: center; }
+    .signs .box .sig-img img { max-width: 220px; max-height: 56px; object-fit: contain; }
     .signs .box .label { color: #777; font-size: 11px; margin-top: 4px; text-align: center; }
     .footer { text-align: center; font-size: 11px; color: #999; margin-top: 14px; }
-    .controls { max-width: 720px; margin: 8px auto 24px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+    .controls { max-width: 720px; margin: 8px auto 24px; padding: 14px 16px; background: linear-gradient(180deg,#fff9ec,#f5ecd8); border: 1px solid #c9b48a; border-radius: 8px; }
+    .controls h3 { margin: 0 0 4px; color: #4a3b1c; font-size: 15px; }
+    .controls p { margin: 0 0 8px; color: #6b5e48; font-size: 12px; }
+    .controls .signature-canvas { width: 100%; height: 140px; border: 1px dashed #a88d55; border-radius: 4px; background: #fff; touch-action: none; display: block; }
+    .controls .actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
     .controls button {
       background: #6b4f1d; color: #fff; border: 0; border-radius: 8px;
       padding: 8px 18px; font-size: 14px; cursor: pointer; font-family: inherit;
     }
     .controls button.secondary { background: #aaa; }
+    .controls button.whatsapp { background: linear-gradient(180deg,#34d070,#1fa855); }
     @media print {
       body { background: #fff; }
       .controls { display: none !important; }
@@ -178,12 +186,14 @@ function renderHtml(d: PaymentReceiptData): string {
 
     <div class="signs">
       <div class="box">
-        <div class="line"></div>
+        <div id="clientSigBox" class="line"></div>
         <div class="label">توقيع العميل</div>
       </div>
       <div class="box">
-        <div class="line"></div>
-        <div class="label">توقيع الموظف / إدارة الصالة</div>
+        ${d.managerSignatureUrl
+          ? `<div class="sig-img"><img alt="توقيع إدارة الصالة" src="${esc(d.managerSignatureUrl)}" /></div>`
+          : `<div class="line"></div>`}
+        <div class="label">توقيع إدارة الصالة (معتمد)</div>
       </div>
     </div>
 
@@ -191,14 +201,63 @@ function renderHtml(d: PaymentReceiptData): string {
   </div>
 
   <div class="controls">
-    <button onclick="window.print()">طباعة</button>
-    <button class="secondary" onclick="window.close()">إغلاق</button>
+    <h3>توقيع العميل الإلكتروني</h3>
+    <p>وقّع على الإطار أدناه، ثم اضغط "اعتماد وطباعة". توقيع إدارة الصالة مثبّت تلقائياً.</p>
+    <canvas id="clientSignatureCanvas" class="signature-canvas"></canvas>
+    <div class="actions">
+      <button type="button" class="secondary" id="clearSignBtn">مسح التوقيع</button>
+      <button type="button" id="approvePrintBtn">اعتماد وطباعة</button>
+      <button type="button" id="printNoSignBtn" class="secondary">طباعة بدون توقيع</button>
+      <button type="button" class="secondary" onclick="window.close()">إغلاق</button>
+    </div>
   </div>
 
   <script>
-    window.addEventListener('load', () => {
-      setTimeout(() => { try { window.print(); } catch (e) {} }, 350);
-    });
+    (() => {
+      const canvas = document.getElementById("clientSignatureCanvas");
+      const clearBtn = document.getElementById("clearSignBtn");
+      const approveBtn = document.getElementById("approvePrintBtn");
+      const noSignBtn = document.getElementById("printNoSignBtn");
+      const sigBox = document.getElementById("clientSigBox");
+      if (!canvas || !clearBtn || !approveBtn || !noSignBtn || !sigBox) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      let drawing = false; let signed = false;
+      const resize = () => {
+        const rect = canvas.getBoundingClientRect();
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(rect.width * ratio);
+        canvas.height = Math.floor(rect.height * ratio);
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round";
+        ctx.strokeStyle = "#1a1a1a"; ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, rect.width, rect.height);
+      };
+      const point = (e) => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+      const start = (e) => { drawing = true; const p = point(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); };
+      const move = (e) => { if (!drawing) return; const p = point(e); ctx.lineTo(p.x, p.y); ctx.stroke(); signed = true; e.preventDefault(); };
+      const stop = () => { drawing = false; ctx.closePath(); };
+      canvas.addEventListener("pointerdown", start);
+      canvas.addEventListener("pointermove", move);
+      canvas.addEventListener("pointerup", stop);
+      canvas.addEventListener("pointerleave", stop);
+      canvas.addEventListener("pointercancel", stop);
+      clearBtn.addEventListener("click", () => {
+        const r = canvas.getBoundingClientRect();
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, r.width, r.height); signed = false;
+      });
+      const doPrint = () => setTimeout(() => window.print(), 80);
+      noSignBtn.addEventListener("click", doPrint);
+      approveBtn.addEventListener("click", () => {
+        if (!signed) { window.alert("يرجى توقيع العميل أولاً."); return; }
+        const url = canvas.toDataURL("image/png");
+        sigBox.outerHTML = '<div class="sig-img"><img alt="توقيع العميل" src="' + url + '" /></div>';
+        doPrint();
+      });
+      window.addEventListener("load", resize);
+      window.addEventListener("resize", resize);
+      resize();
+    })();
   </script>
 </body>
 </html>`;

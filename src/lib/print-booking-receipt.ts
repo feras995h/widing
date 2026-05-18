@@ -2,6 +2,7 @@ interface BookingReceiptData {
   hallName: string;
   hallTagline?: string;
   logoUrl?: string;
+  managerSignatureUrl?: string;
   receiptNo: string;
   issuedAt: string;
   customerName: string;
@@ -79,6 +80,13 @@ function renderHtml(data: BookingReceiptData): string {
   const notesHtml = data.notes?.trim()
     ? `<div class="notes"><strong>ملاحظات:</strong> ${esc(data.notes)}</div>`
     : "";
+
+  const managerSigImg = data.managerSignatureUrl
+    ? `<img alt="توقيع إدارة الصالة" src="${esc(data.managerSignatureUrl)}" />`
+    : "________________";
+  const managerSigImgShort = data.managerSignatureUrl
+    ? `<img alt="توقيع إدارة الصالة" src="${esc(data.managerSignatureUrl)}" />`
+    : "_______";
   const contractHtml = `
         <section class="contract">
           <h3>عقد حجز صالة مناسبات</h3>
@@ -167,14 +175,14 @@ function renderHtml(data: BookingReceiptData): string {
             <section class="contract-clause contract-signatures">
               <p>توقيع الطرف الأول ( صالة فيلورا ) :</p>
               <p class="contract-line">الاسم: <span class="fill">${esc(VENUE_PARTY1_SIGNATORY_NAME)}</span></p>
-              <p class="contract-line">التوقيع: <span id="contractParty1SigMain" class="fill contract-sig-slot">________________</span></p>
+              <p class="contract-line">التوقيع: <span id="contractParty1SigMain" class="fill contract-sig-slot">${managerSigImg}</span></p>
               <p>توقيع الطرف الثاني ( العميل ) :</p>
               <p class="contract-line">الاسم: <span class="fill">${esc(data.customerName)}</span></p>
               <p class="contract-line">التوقيع: <span class="fill contract-sig-slot contract-sig-client">________________</span></p>
               <p class="contract-line">تاريخ توقيع العقد: ( <span class="fill">${esc(formatSlashDate(data.issuedAt))}</span> )</p>
               <p>يقر الطرف الثاني بأنه استلم نسخة من هذا العقد بعد التوقيع :</p>
               <p class="contract-receipt-ack"><span class="ack-yes">نعم ☑</span><span class="ack-no">لا ☐</span></p>
-              <p class="contract-line">توقيع الطرف الأول ( الصالة ) : <span id="contractParty1SigShort" class="fill contract-sig-slot">_______</span></p>
+              <p class="contract-line">توقيع الطرف الأول ( الصالة ) : <span id="contractParty1SigShort" class="fill contract-sig-slot">${managerSigImgShort}</span></p>
               <p class="contract-line">توقيع الطرف الثاني ( العميل ) : <span class="fill contract-sig-slot contract-sig-client">_______</span></p>
             </section>
           </div>
@@ -741,38 +749,36 @@ function renderHtml(data: BookingReceiptData): string {
         ${contractHtml}
 
         <section class="staff-signature">
-          <p class="sig-title">توقيع موظف الاستقبال</p>
+          <p class="sig-title">توقيع إدارة الصالة</p>
           <div class="sig-preview" id="staffSigPreview">
-            <span class="sig-placeholder">سيظهر التوقيع بعد الاعتماد</span>
+            ${data.managerSignatureUrl ? `<img alt="توقيع إدارة الصالة" src="${esc(data.managerSignatureUrl)}" />` : `<span class="sig-placeholder">لم يتم رفع توقيع الإدارة</span>`}
           </div>
-          <div class="muted" id="staffSigDate">لم يتم الاعتماد بعد</div>
+          <div class="muted">توقيع معتمد ثابت — ${esc(data.hallName)}</div>
         </section>
         <p class="footer-note">شكراً لثقتكم — ${esc(data.hallName)}</p>
         </div>
       </main>
 
       <section class="controls">
-        <h3>اعتماد الوصل قبل الإرسال للعميل</h3>
-        <p>وقّع بإصبعك/القلم على الشاشة، ثم اختر "اعتماد وتصدير".</p>
-        <canvas id="signatureCanvas" class="signature-canvas"></canvas>
+        <h3>توقيع العميل الإلكتروني</h3>
+        <p>ليوقّع العميل على الإطار أدناه بالإصبع أو الفأرة، ثم اضغط اعتماد وتصدير. توقيع إدارة الصالة مثبّت تلقائياً.</p>
+        <canvas id="clientSignatureCanvas" class="signature-canvas"></canvas>
         <div class="actions">
           <button type="button" class="btn" id="clearSignBtn">مسح التوقيع</button>
           <button type="button" class="btn primary" id="approvePrintBtn">اعتماد وتصدير (PDF/طباعة)</button>
           <button type="button" class="btn whatsapp" id="sendWhatsappBtn">إرسال عبر واتساب</button>
-          <button type="button" class="btn" id="printNoSignBtn">طباعة بدون توقيع</button>
+          <button type="button" class="btn" id="printNoSignBtn">طباعة بدون توقيع العميل</button>
         </div>
       </section>
     </div>
     <script>
       (() => {
-        const canvas = document.getElementById("signatureCanvas");
+        const canvas = document.getElementById("clientSignatureCanvas");
         const clearBtn = document.getElementById("clearSignBtn");
         const approveBtn = document.getElementById("approvePrintBtn");
         const whatsappBtn = document.getElementById("sendWhatsappBtn");
         const noSignBtn = document.getElementById("printNoSignBtn");
-        const preview = document.getElementById("staffSigPreview");
-        const dateEl = document.getElementById("staffSigDate");
-        if (!canvas || !clearBtn || !approveBtn || !whatsappBtn || !noSignBtn || !preview || !dateEl) return;
+        if (!canvas || !clearBtn || !approveBtn || !whatsappBtn || !noSignBtn) return;
 
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
@@ -789,7 +795,7 @@ function renderHtml(data: BookingReceiptData): string {
           ctx.lineWidth = 2.4;
           ctx.lineCap = "round";
           ctx.lineJoin = "round";
-          ctx.strokeStyle = "#3a2b13";
+          ctx.strokeStyle = "#1a1a1a";
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, rect.width, rect.height);
         };
@@ -798,7 +804,6 @@ function renderHtml(data: BookingReceiptData): string {
           const rect = canvas.getBoundingClientRect();
           return { x: event.clientX - rect.left, y: event.clientY - rect.top };
         };
-
         const start = (event) => {
           drawing = true;
           const p = point(event);
@@ -806,7 +811,6 @@ function renderHtml(data: BookingReceiptData): string {
           ctx.moveTo(p.x, p.y);
           event.preventDefault();
         };
-
         const move = (event) => {
           if (!drawing) return;
           const p = point(event);
@@ -815,31 +819,28 @@ function renderHtml(data: BookingReceiptData): string {
           signed = true;
           event.preventDefault();
         };
-
-        const stop = () => {
-          drawing = false;
-          ctx.closePath();
-        };
-
+        const stop = () => { drawing = false; ctx.closePath(); };
         const clear = () => {
           const rect = canvas.getBoundingClientRect();
           ctx.fillStyle = "#ffffff";
           ctx.fillRect(0, 0, rect.width, rect.height);
           signed = false;
-          preview.innerHTML = '<span class="sig-placeholder">سيظهر التوقيع بعد الاعتماد</span>';
-          dateEl.textContent = "لم يتم الاعتماد بعد";
+        };
+        const applyClientSignature = () => {
+          if (!signed) return;
+          const url = canvas.toDataURL("image/png");
+          const imgHtml = '<img alt="توقيع العميل" src="' + url + '" />';
+          document.querySelectorAll('.contract-sig-client').forEach((el) => {
+            el.innerHTML = imgHtml;
+          });
         };
 
-        const applySignature = () => {
-          const url = canvas.toDataURL("image/png");
-          const imgHtml = '<img alt="توقيع ممثل الصالة" src="' + url + '" />';
-          preview.innerHTML = imgHtml;
-          dateEl.textContent = "تم الاعتماد: " + new Date().toLocaleString("ar-LY-u-nu-latn");
-          const main = document.getElementById("contractParty1SigMain");
-          const short = document.getElementById("contractParty1SigShort");
-          if (main) main.innerHTML = imgHtml;
-          if (short) short.innerHTML = imgHtml;
-        };
+        canvas.addEventListener("pointerdown", start);
+        canvas.addEventListener("pointermove", move);
+        canvas.addEventListener("pointerup", stop);
+        canvas.addEventListener("pointerleave", stop);
+        canvas.addEventListener("pointercancel", stop);
+        clearBtn.addEventListener("click", clear);
 
         const doPrint = () => {
           setTimeout(() => window.print(), 80);
@@ -868,13 +869,6 @@ function renderHtml(data: BookingReceiptData): string {
           ].join("\\n");
         };
 
-        canvas.addEventListener("pointerdown", start);
-        canvas.addEventListener("pointermove", move);
-        canvas.addEventListener("pointerup", stop);
-        canvas.addEventListener("pointerleave", stop);
-        canvas.addEventListener("pointercancel", stop);
-        clearBtn.addEventListener("click", clear);
-        noSignBtn.addEventListener("click", doPrint);
         whatsappBtn.addEventListener("click", () => {
           const phone = toWhatsappNumber("${esc(data.customerPhone)}");
           if (!phone) {
@@ -885,12 +879,15 @@ function renderHtml(data: BookingReceiptData): string {
           const url = "https://wa.me/" + phone + "?text=" + text;
           window.open(url, "_blank");
         });
+        noSignBtn.addEventListener("click", () => {
+          doPrint();
+        });
         approveBtn.addEventListener("click", () => {
           if (!signed) {
-            window.alert("الرجاء إضافة توقيع الموظف قبل الاعتماد.");
+            window.alert("يرجى التوقيع أولاً في الإطار المخصص لتوقيع العميل.");
             return;
           }
-          applySignature();
+          applyClientSignature();
           doPrint();
         });
 

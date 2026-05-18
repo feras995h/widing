@@ -27,6 +27,7 @@ import {
   openPaymentPrintWindow,
 } from "@/lib/print-payment-receipt";
 import logo from "@/assets/logo.png";
+import { MANAGER_SIGNATURE_DATA_URL } from "@/lib/manager-signature";
 
 export interface PaymentBookingContext {
   customerName: string;
@@ -83,6 +84,7 @@ export function PaymentDialog({
               hallName: "VELOURA VENUE",
               hallTagline: "FOR WEDDINGS & EVENTS",
               logoUrl: logo,
+              managerSignatureUrl: MANAGER_SIGNATURE_DATA_URL,
               receiptNo: String(paymentId).slice(0, 8).toUpperCase(),
               issuedAt: new Date().toISOString(),
               customerName: bookingContext.customerName,
